@@ -76,7 +76,6 @@ def build_top_gainers_rows(runs: list[dict], news_map: dict) -> list[dict]:
             "200 MA":                    run.get("ma200", ""),
             "GAIN $/SHARE":              gain_d,
             "GAIN %/SHARE":              gain_p,
-            "DID I TRADE STOCK?":        "N",
             "NEWS":                      news.get("news",      ""),
             "NEWS TYPE":                 news.get("news_type", ""),
             "NOTES":                     "",
