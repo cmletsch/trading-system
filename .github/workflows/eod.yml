@@ -5,6 +5,9 @@ on:
     - cron: '0 0 * * 2-6'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   eod-update:
     runs-on: ubuntu-latest
@@ -20,7 +23,8 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
-        run: cd scripts && python eod_update.py
+        run: python scripts/eod_update.py
+      - run: mkdir -p dist
       - uses: nwtgck/actions-netlify@v3.0
         with:
           publish-dir: './dist'
