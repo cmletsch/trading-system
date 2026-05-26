@@ -1,10 +1,11 @@
 """
 sync_data.py — reads TOP Gainers Data + MDR TRACKING from Google Sheets
-Outputs: data/gainers.json, data/mdr.json
+Outputs: data/gainers.json, data/mdr.json, data/news.json
 Runs via GitHub Actions after market close (8:30 PM ET weekdays)
 """
 
-import os, json, datetime, re
+import os, json, datetime, re, time
+import urllib.request, urllib.error
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -23,11 +24,9 @@ now_utc = datetime.datetime.utcnow().isoformat() + 'Z'
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def clean(v):
-    """Return stripped string or empty string."""
     return str(v).strip() if v not in (None, '') else ''
 
 def fmt_date(v):
-    """Normalize date to YYYY-MM-DD."""
     s = clean(v)
     if not s: return ''
     if re.match(r'^\d{4}-\d{2}-\d{2}', s): return s[:10]
@@ -39,7 +38,6 @@ def fmt_date(v):
     return s
 
 def fmt_time(v):
-    """Normalize time to HH:MM."""
     s = clean(v)
     if not s: return ''
     m = re.search(r'(\d{1,2}):(\d{2})', s)
@@ -47,7 +45,6 @@ def fmt_time(v):
     return s
 
 def find_header_row(rows, key='STOCK'):
-    """Find the row index where the actual column headers live."""
     for i, row in enumerate(rows[:6]):
         if any(str(c).strip().upper() == key for c in row):
             return i
@@ -69,7 +66,6 @@ if ws_g:
         print("  ⚠ Could not find header row in TOP Gainers Data")
     else:
         headers = [str(h).strip() for h in raw_g[hrow]]
-        # Build lookup: lower-case header → index
         hmap = {h.lower(): i for i, h in enumerate(headers) if h}
 
         def gc_col(*names):
@@ -111,7 +107,6 @@ if ws_g:
             stock = cell(row, c_stock).upper()
             date  = fmt_date(cell(row, c_date))
             if not stock or not date: continue
-            # Only keep valid date rows
             if not re.match(r'^\d{4}-\d{2}-\d{2}$', date): continue
 
             gainers.append({
@@ -187,6 +182,62 @@ if ws_m:
             })
     print(f"  ✓ {len(mdr_records)} MDR records")
 
+# ── Fetch News from Yahoo Finance ─────────────────────────────────────────────
+print("\nFetching news headlines...")
+
+def fetch_news(symbol, retries=2):
+    """Fetch top news headlines for a ticker from Yahoo Finance."""
+    url = (
+        f'https://query1.finance.yahoo.com/v1/finance/search'
+        f'?q={symbol}&newsCount=5&quotesCount=0&enableFuzzyQuery=false'
+    )
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'application/json',
+    }
+    for attempt in range(retries + 1):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read())
+            items = data.get('news', [])
+            results = []
+            for item in items[:5]:
+                title = item.get('title', '')
+                pub   = item.get('publisher', '')
+                ts    = item.get('providerPublishTime', 0)
+                link  = item.get('link', '')
+                if title:
+                    results.append({
+                        'title': title,
+                        'publisher': pub,
+                        'date': datetime.datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d') if ts else '',
+                        'url': link,
+                    })
+            return results
+        except Exception as e:
+            if attempt < retries:
+                time.sleep(1)
+            else:
+                print(f"    ⚠ {symbol}: {e}")
+    return []
+
+# Get unique tickers — only those that appeared in last 90 days (keep it focused)
+cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=90)).strftime('%Y-%m-%d')
+recent_tickers = sorted(set(r['stock'] for r in gainers if r.get('date', '') >= cutoff))
+print(f"  Fetching news for {len(recent_tickers)} tickers from last 90 days...")
+
+news_data = {}
+for i, sym in enumerate(recent_tickers):
+    headlines = fetch_news(sym)
+    if headlines:
+        news_data[sym] = headlines
+    if (i + 1) % 10 == 0:
+        print(f"  ... {i+1}/{len(recent_tickers)} done")
+    time.sleep(0.3)  # polite rate limiting
+
+print(f"  ✓ News fetched for {len(news_data)} of {len(recent_tickers)} tickers")
+
 # ── Write JSON files ──────────────────────────────────────────────────────────
 os.makedirs('data', exist_ok=True)
 
@@ -196,4 +247,7 @@ with open('data/gainers.json', 'w') as f:
 with open('data/mdr.json', 'w') as f:
     json.dump({'updated': now_utc, 'count': len(mdr_records), 'records': mdr_records}, f)
 
-print(f"\n✅ Done — {len(gainers)} gainers + {len(mdr_records)} MDR records written to data/")
+with open('data/news.json', 'w') as f:
+    json.dump({'updated': now_utc, 'tickers': len(news_data), 'data': news_data}, f)
+
+print(f"\n✅ Done — {len(gainers)} gainers + {len(mdr_records)} MDR + {len(news_data)} tickers with news")
