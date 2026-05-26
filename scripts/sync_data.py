@@ -95,8 +95,8 @@ if ws_g:
         c_pos   = gc_col('position')
         c_ma20  = gc_col('20 ma')
         c_ma200 = gc_col('200 ma')
-        c_gain$ = gc_col('gain $/share', 'gain $ / share')
-        c_gain_ = gc_col('gain %/share', 'gain % / share')
+        c_gainD = gc_col('gain $/share', 'gain $ / share')
+        c_gainPct = gc_col('gain %/share', 'gain % / share')
         c_trd   = gc_col('did i trade stock?', 'traded')
         c_opp   = gc_col('did i trade this opp?')
         c_mdr   = gc_col('mdr watchlist', 'on mdr wl?', 'mdr wl?', 'mdr?')
@@ -132,8 +132,8 @@ if ws_g:
                 'range':   cell(row, c_range),
                 'pos':     cell(row, c_pos),
                 'ma20':    cell(row, c_ma20),
-                'ma200':   cell(row, c_ma200),
-                'gainD':   cell(row, c_gain$),
+                'gainD':   cell(row, c_gainD),
+                'gainPct': cell(row, c_gainPct),
                 'gainPct': cell(row, c_gain_),
                 'traded':  cell(row, c_trd),
                 'ts':      cell(row, c_opp),
