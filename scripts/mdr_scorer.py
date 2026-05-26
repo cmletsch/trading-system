@@ -201,7 +201,6 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
             (top_gainers_df["STOCK"].astype(str).str.upper().str.strip() == ticker) &
             (pd.to_datetime(top_gainers_df["DATE"], errors="coerce") >= cutoff)
         )
-        # Only filter on entry/exit if those columns exist
         if "ENTRY PRICE" in cols:
             mask &= (top_gainers_df["ENTRY PRICE"].astype(str).str.strip() != "")
         if "EXIT PRICE" in cols:
@@ -214,33 +213,52 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
     if len(subset) < MDR_MIN_DAYS:
         return None
 
-    # Escalating exits: each day's exit > previous day's exit
-    exits = pd.to_numeric(subset.sort_values("DATE")["EXIT PRICE"], errors="coerce").dropna()
-    escalating = all(exits.iloc[i] > exits.iloc[i-1] for i in range(1, len(exits)))
+    if len(subset) < MDR_MIN_DAYS:
+        return None
 
-    # First entry price
-    first_entry = pd.to_numeric(subset.sort_values("DATE")["ENTRY PRICE"].iloc[0],
-                                errors="coerce")
+    try:
+        sorted_sub = subset.sort_values("DATE")
+        latest     = sorted_sub.iloc[-1]
 
-    # Most recent run data
-    latest = subset.sort_values("DATE").iloc[-1]
+        # Escalating exits
+        if "EXIT PRICE" in cols:
+            exits = pd.to_numeric(sorted_sub["EXIT PRICE"], errors="coerce").dropna()
+            escalating = all(exits.iloc[i] > exits.iloc[i-1] for i in range(1, len(exits)))
+        else:
+            escalating = False
 
-    return {
-        "days_count":   len(subset),
-        "escalating":   escalating,
-        "first_entry":  float(first_entry) if not pd.isna(first_entry) else 0,
-        "latest_date":  str(latest.get("DATE", "")),
-        "latest_entry": str(latest.get("ENTRY PRICE", "")),
-        "latest_exit":  str(latest.get("EXIT PRICE", "")),
-        "latest_legs":  str(latest.get("# LEGS", "")),
-        "latest_state": str(latest.get("TYPE OF STATE", "")),
-        "latest_range": str(latest.get("RANGE", "")),
-        "latest_pos":   str(latest.get("POSITION", "")),
-        "latest_ma20":  str(latest.get("20 MA", "")),
-        "latest_ma200": str(latest.get("200 MA", "")),
-        "float":        str(latest.get("FLOAT", "")),
-        "entry_type":   str(latest.get("ENTRY TYPE", "")),
-    }
+        # First entry price
+        if "ENTRY PRICE" in cols:
+            first_entry = pd.to_numeric(sorted_sub["ENTRY PRICE"].iloc[0], errors="coerce")
+            first_entry = float(first_entry) if not pd.isna(first_entry) else 0
+        else:
+            first_entry = 0
+
+        def safe_get(row, *keys):
+            for k in keys:
+                v = row.get(k, "")
+                if v not in ("", None): return str(v)
+            return ""
+
+        return {
+            "days_count":   len(subset),
+            "escalating":   escalating,
+            "first_entry":  first_entry,
+            "latest_date":  safe_get(latest, "DATE"),
+            "latest_entry": safe_get(latest, "ENTRY PRICE", "ENTRY"),
+            "latest_exit":  safe_get(latest, "EXIT PRICE", "EXIT"),
+            "latest_legs":  safe_get(latest, "# LEGS", "LEGS"),
+            "latest_state": safe_get(latest, "TYPE OF STATE", "STATE"),
+            "latest_range": safe_get(latest, "RANGE"),
+            "latest_pos":   safe_get(latest, "POSITION"),
+            "latest_ma20":  safe_get(latest, "20 MA", "MA20"),
+            "latest_ma200": safe_get(latest, "200 MA", "MA200"),
+            "float":        safe_get(latest, "FLOAT"),
+            "entry_type":   safe_get(latest, "ENTRY TYPE"),
+        }
+    except Exception as e:
+        print(f"    Warning: could not build qual data for {ticker}: {e}")
+        return None
 
 
 # ── MAIN: UPDATE FULL WATCHLIST ───────────────────────────────────────────────
