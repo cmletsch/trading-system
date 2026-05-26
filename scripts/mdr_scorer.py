@@ -26,32 +26,38 @@ from config import (
 
 def fetch_live_data(ticker: str) -> dict:
     """Fetch current price, rvol, gap, day change for scoring."""
+    safe = {"price": 0, "prev": 0, "open": 0, "day_chg": 0, "gap_pct": 0, "rvol": 0}
     try:
-        t   = yf.Ticker(ticker)
-        inf = t.fast_info
-        hist = t.history(period="2d", interval="1d")
+        t    = yf.Ticker(ticker)
+        hist = t.history(period="5d", interval="1d")
+        if hist.empty:
+            return safe
 
-        price    = float(getattr(inf, "last_price", 0) or 0)
-        prev     = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else 0
-        open_p   = float(hist["Open"].iloc[-1])  if len(hist) >= 1 else 0
-        volume   = float(getattr(inf, "three_month_average_volume", 0) or 0)
-        cur_vol  = float(hist["Volume"].iloc[-1]) if len(hist) >= 1 else 0
+        inf    = t.fast_info
+        price  = float(getattr(inf, "last_price", 0) or 0)
+        if price == 0 and not hist.empty:
+            price = float(hist["Close"].iloc[-1])
 
-        day_chg  = ((price - prev) / prev * 100) if prev > 0 else 0
-        gap_pct  = ((open_p - prev) / prev * 100) if prev > 0 else 0
-        rvol     = (cur_vol / volume) if volume > 0 else 0
+        prev   = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else float(hist["Close"].iloc[-1])
+        open_p = float(hist["Open"].iloc[-1])  if len(hist) >= 1 else 0
+
+        avg_vol = hist["Volume"].replace(0, np.nan).mean()
+        cur_vol = float(hist["Volume"].iloc[-1]) if len(hist) >= 1 else 0
+
+        day_chg = ((price - prev) / prev * 100) if prev > 0 else 0
+        gap_pct = ((open_p - prev) / prev * 100) if prev > 0 else 0
+        rvol    = (cur_vol / avg_vol) if avg_vol and avg_vol > 0 else 0
 
         return {
-            "price":    round(price, 4),
-            "prev":     round(prev, 4),
-            "open":     round(open_p, 4),
-            "day_chg":  round(day_chg, 2),
-            "gap_pct":  round(gap_pct, 2),
-            "rvol":     round(rvol, 2),
+            "price":   round(price,   4),
+            "prev":    round(prev,    4),
+            "open":    round(open_p,  4),
+            "day_chg": round(day_chg, 2),
+            "gap_pct": round(gap_pct, 2),
+            "rvol":    round(rvol,    2),
         }
     except Exception:
-        return {"price": 0, "prev": 0, "open": 0,
-                "day_chg": 0, "gap_pct": 0, "rvol": 0}
+        return safe
 
 
 # ── PATTERN DETECTION ─────────────────────────────────────────────────────────
@@ -184,14 +190,26 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
     ticker = ticker.upper().strip()
     cutoff = pd.Timestamp.today() - pd.Timedelta(days=MDR_LOOKBACK_DAYS)
 
-    # Filter to this ticker, recent dates, with valid entry+exit prices
-    mask = (
-        (top_gainers_df["STOCK"].str.upper().str.strip() == ticker) &
-        (pd.to_datetime(top_gainers_df["DATE"], errors="coerce") >= cutoff) &
-        (top_gainers_df["ENTRY PRICE"].astype(str).str.strip() != "") &
-        (top_gainers_df["EXIT PRICE"].astype(str).str.strip() != "")
-    )
-    subset = top_gainers_df[mask]
+    cols = top_gainers_df.columns.tolist()
+
+    # Require STOCK and DATE at minimum
+    if "STOCK" not in cols or "DATE" not in cols:
+        return None
+
+    try:
+        mask = (
+            (top_gainers_df["STOCK"].astype(str).str.upper().str.strip() == ticker) &
+            (pd.to_datetime(top_gainers_df["DATE"], errors="coerce") >= cutoff)
+        )
+        # Only filter on entry/exit if those columns exist
+        if "ENTRY PRICE" in cols:
+            mask &= (top_gainers_df["ENTRY PRICE"].astype(str).str.strip() != "")
+        if "EXIT PRICE" in cols:
+            mask &= (top_gainers_df["EXIT PRICE"].astype(str).str.strip() != "")
+        subset = top_gainers_df[mask]
+    except Exception as e:
+        print(f"    Warning: could not filter {ticker}: {e}")
+        return None
 
     if len(subset) < MDR_MIN_DAYS:
         return None
