@@ -95,15 +95,19 @@ def append_top_gainers_rows(rows: list[dict]):
     if not existing:
         ws.append_row(TOP_GAINERS_HEADERS)
 
+    new_rows = []
     added = 0
     for row in rows:
         key = (str(row.get("DATE", "")), str(row.get("STOCK", "")), str(row.get("TIME IN", "")))
         if key in existing_keys:
             continue
         ordered = [row.get(h, "") for h in TOP_GAINERS_HEADERS]
-        ws.append_row(ordered, value_input_option="USER_ENTERED")
+        new_rows.append(ordered)
         existing_keys.add(key)
         added += 1
+
+    if new_rows:
+        ws.append_rows(new_rows, value_input_option="USER_ENTERED")
 
     print(f"  Appended {added} new rows to {SHEET_TOP_GAINERS}")
     return added
@@ -140,12 +144,13 @@ def write_mdr_tracking(df: pd.DataFrame):
     from config import SHEET_MDR_TRACKING
     ws = get_sheet(SHEET_MDR_TRACKING)
     ws.clear()
-    # Write headers
-    ws.append_row(MDR_HEADERS)
-    # Write data
+    # Batch all rows into a single API call to avoid quota limits
+    all_rows = [MDR_HEADERS]
     for _, row in df.iterrows():
         ordered = [str(row.get(h, "")) if pd.notna(row.get(h, "")) else "" for h in MDR_HEADERS]
-        ws.append_row(ordered, value_input_option="USER_ENTERED")
+        all_rows.append(ordered)
+    if all_rows:
+        ws.update(all_rows, value_input_option="USER_ENTERED")
     print(f"  MDR TRACKING updated: {len(df)} rows")
 
 
