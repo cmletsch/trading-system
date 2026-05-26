@@ -24,7 +24,7 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
         run: python scripts/eod_update.py
-      - run: mkdir -p dist
+      - run: mkdir -p dist && echo "--- dist contents ---" && ls -la dist/
       - uses: nwtgck/actions-netlify@v3.0
         with:
           publish-dir: './dist'
