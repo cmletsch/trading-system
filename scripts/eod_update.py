@@ -134,6 +134,19 @@ def main():
     # Copy watchlist page
     generate_watchlist_page(updated_mdr_df, "dist/watchlist.html")
 
+    # Write netlify.toml for routing
+    with open("dist/netlify.toml", "w") as f:
+        f.write("""[[redirects]]
+  from = "/"
+  to = "/fge.html"
+  status = 302
+
+[[redirects]]
+  from = "/watchlist"
+  to = "/mdr.html"
+  status = 302
+""")
+
     # ── STEP 7: Export backup ─────────────────────────────────────────────────
     print("\n[STEP 6] Exporting backup...")
     backup_path = f"dist/trading_data_{date.today().isoformat()}.xlsx"
