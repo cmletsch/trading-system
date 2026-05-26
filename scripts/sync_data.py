@@ -225,20 +225,9 @@ def fetch_news(symbol, retries=2):
 # Get unique tickers — only those that appeared in last 90 days (keep it focused)
 cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=90)).strftime('%Y-%m-%d')
 recent_tickers = sorted(set(r['stock'] for r in gainers if r.get('date', '') >= cutoff))
-print(f"  Fetching news for {len(recent_tickers)} tickers from last 90 days...")
 
-news_data = {}
-for i, sym in enumerate(recent_tickers):
-    headlines = fetch_news(sym)
-    if headlines:
-        news_data[sym] = headlines
-    if (i + 1) % 10 == 0:
-        print(f"  ... {i+1}/{len(recent_tickers)} done")
-    time.sleep(0.3)  # polite rate limiting
 
-print(f"  ✓ News fetched for {len(news_data)} of {len(recent_tickers)} tickers")
-
-# ── Write JSON files ──────────────────────────────────────────────────────────
+# ── Write core data files FIRST (gainers + MDR always succeed) ───────────────
 os.makedirs('data', exist_ok=True)
 
 with open('data/gainers.json', 'w') as f:
@@ -247,7 +236,36 @@ with open('data/gainers.json', 'w') as f:
 with open('data/mdr.json', 'w') as f:
     json.dump({'updated': now_utc, 'count': len(mdr_records), 'records': mdr_records}, f)
 
-with open('data/news.json', 'w') as f:
-    json.dump({'updated': now_utc, 'tickers': len(news_data), 'data': news_data}, f)
+print(f"\n✅ Core data written — {len(gainers)} gainers + {len(mdr_records)} MDR records")
 
-print(f"\n✅ Done — {len(gainers)} gainers + {len(mdr_records)} MDR + {len(news_data)} tickers with news")
+# ── Fetch News from Yahoo Finance (optional — never blocks core sync) ─────────
+print("\nFetching news headlines (optional)...")
+news_data = {}
+try:
+    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=90)).strftime('%Y-%m-%d')
+    recent_tickers = sorted(set(r['stock'] for r in gainers if r.get('date', '') >= cutoff))
+    print(f"  Fetching news for {len(recent_tickers)} tickers from last 90 days...")
+
+    for i, sym in enumerate(recent_tickers):
+        try:
+            headlines = fetch_news(sym)
+            if headlines:
+                news_data[sym] = headlines
+        except Exception as e:
+            pass  # skip this ticker, keep going
+        if (i + 1) % 10 == 0:
+            print(f"  ... {i+1}/{len(recent_tickers)} done")
+        time.sleep(0.3)
+
+    print(f"  ✓ News fetched for {len(news_data)} of {len(recent_tickers)} tickers")
+    with open('data/news.json', 'w') as f:
+        json.dump({'updated': now_utc, 'tickers': len(news_data), 'data': news_data}, f)
+    print("  ✓ news.json written")
+except Exception as e:
+    print(f"  ⚠ News fetch skipped: {e}")
+    # Write empty news.json so dashboard doesn't 404
+    if not os.path.exists('data/news.json'):
+        with open('data/news.json', 'w') as f:
+            json.dump({'updated': now_utc, 'tickers': 0, 'data': {}}, f)
+
+print(f"\n✅ All done — {len(gainers)} gainers + {len(mdr_records)} MDR + {len(news_data)} tickers with news")
