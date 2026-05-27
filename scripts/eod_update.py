@@ -32,6 +32,11 @@ from sheets_client     import (
 )
 from generate_fge_dashboard import generate_fge_dashboard
 from generate_mdr_dashboard import generate_mdr_dashboard
+from generate_data_files import (
+    build_gainers_json, build_mdr_json,
+    build_watchlist_payload, update_netlify_watchlist,
+    write_data_files,
+)
 
 
 def build_top_gainers_rows(runs: list[dict], news_map: dict) -> list[dict]:
