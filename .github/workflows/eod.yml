@@ -17,7 +17,7 @@ permissions:
 jobs:
   eod-update:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
@@ -38,6 +38,7 @@ jobs:
           SPREADSHEET_ID:     ${{ secrets.SPREADSHEET_ID }}
           FINNHUB_API_KEY:    ${{ secrets.FINNHUB_API_KEY }}
           ALPHA_VANTAGE_KEY:  ${{ secrets.ALPHA_VANTAGE_KEY }}
+          POLYGON_API_KEY:   ${{ secrets.POLYGON_API_KEY }}
         run: python scripts/eod_update.py
 
       - name: Commit data files to GitHub
