@@ -330,7 +330,7 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
     print(f"    Got live data for {len(live_cache)} stocks")
 
     # ── Score and update all stocks ───────────────────────────────────────────
-    rows_to_remove = []
+    rows_to_remove = set()  # tickers explicitly excluded
     for idx, row in df.iterrows():
         ticker = str(row.get("STOCK", "")).strip().upper()
         if not ticker:
@@ -349,7 +349,7 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
         # Check timeout
         should_weaken, should_remove = is_timed_out(days_on_list, days_since_run)
         if should_remove:
-            rows_to_remove.append(idx)
+            rows_to_remove.add(ticker)
             print(f" REMOVED (timed out)")
             continue
 
@@ -359,7 +359,7 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
 
         # Exclusion: price below $0.50 (we check current price)
         if live["price"] > 0 and live["price"] < MDR_EXCLUDE_PRICE:
-            rows_to_remove.append(idx)
+            rows_to_remove.add(ticker)
             print(f" REMOVED (price ${live['price']} < ${MDR_EXCLUDE_PRICE})")
             continue
 
@@ -396,8 +396,8 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
 
     # Remove timed-out/excluded stocks
     if rows_to_remove:
-        df = df.drop(index=rows_to_remove).reset_index(drop=True)
+        df = df[~df["STOCK"].str.upper().str.strip().isin(rows_to_remove)].reset_index(drop=True)
         print(f"    Removed {len(rows_to_remove)} stocks from watchlist")
 
-    print(f"\n  MDR Watchlist: {len(df)} stocks total, {new_added} added today")
-    return df
+    print(f"\n  MDR Watchlist: {len(df)} stocks scored, {new_added} added today, {len(rows_to_remove)} removed")
+    return df, rows_to_remove
