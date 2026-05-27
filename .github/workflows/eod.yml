@@ -2,36 +2,46 @@ name: EOD Trading Update
 
 on:
   schedule:
+    # 8pm EDT (UTC-4) = 00:00 UTC Tuesday-Saturday
+    # NOTE: In November when clocks fall back, change to:
+    # - cron: '0 1 * * 2-6'   (8pm EST = 01:00 UTC)
     - cron: '0 0 * * 2-6'
   workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+permissions:
+  contents: write
+
 jobs:
   eod-update:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      - run: pip install -r requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
       - name: Run EOD update
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+          SPREADSHEET_ID:     ${{ secrets.SPREADSHEET_ID }}
         run: python scripts/eod_update.py
-      - run: mkdir -p dist && echo "--- dist contents ---" && ls -la dist/
-      - uses: nwtgck/actions-netlify@v3.0
-        with:
-          publish-dir: './dist'
-          production-deploy: true
-          deploy-message: "EOD update"
-          enable-pull-request-comment: false
-          enable-commit-comment: false
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+      - name: Commit data files to GitHub
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add data/
+          git diff --staged --quiet || git commit -m "EOD data update $(date -u '+%Y-%m-%d')"
+          git push
