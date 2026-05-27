@@ -24,6 +24,59 @@ from config import (
 
 # ── LIVE DATA ─────────────────────────────────────────────────────────────────
 
+
+
+def _batch_fetch_live(tickers: list[str]) -> dict:
+    """Fetch live price data for all tickers in one yfinance batch call."""
+    result = {}
+    if not tickers:
+        return result
+    try:
+        import time as _time
+        raw = yf.download(
+            tickers=" ".join(tickers),
+            period="5d", interval="1d",
+            group_by="ticker",
+            progress=False,
+            threads=False,
+            auto_adjust=True,
+        )
+        if raw.empty:
+            return result
+
+        if isinstance(raw.columns, pd.MultiIndex):
+            ticker_data = {t: raw[t] for t in tickers if t in raw.columns.get_level_values(0)}
+        else:
+            ticker_data = {tickers[0]: raw} if len(tickers) == 1 else {}
+
+        for ticker, hist in ticker_data.items():
+            try:
+                if hist.empty or len(hist) < 1:
+                    continue
+                price  = float(hist["Close"].iloc[-1])
+                prev   = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else price
+                open_p = float(hist["Open"].iloc[-1])
+                avg_vol = hist["Volume"].replace(0, np.nan).mean()
+                cur_vol = float(hist["Volume"].iloc[-1])
+
+                day_chg = ((price - prev) / prev * 100) if prev > 0 else 0
+                gap_pct = ((open_p - prev) / prev * 100) if prev > 0 else 0
+                rvol    = (cur_vol / avg_vol) if avg_vol and avg_vol > 0 else 0
+
+                result[ticker] = {
+                    "price":   round(price,   4),
+                    "prev":    round(prev,    4),
+                    "open":    round(open_p,  4),
+                    "day_chg": round(day_chg, 2),
+                    "gap_pct": round(gap_pct, 2),
+                    "rvol":    round(rvol,    2),
+                }
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"    Batch live fetch failed: {e}")
+    return result
+
 def fetch_live_data(ticker: str) -> dict:
     """Fetch current price, rvol, gap, day change for scoring."""
     safe = {"price": 0, "prev": 0, "open": 0, "day_chg": 0, "gap_pct": 0, "rvol": 0}
@@ -315,6 +368,12 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
         existing_tickers.add(ticker)
         new_added += 1
 
+    # ── Pre-fetch all live data in one batch ──────────────────────────────────
+    all_tickers = [str(r.get("STOCK","")).strip().upper() for _, r in df.iterrows() if r.get("STOCK")]
+    print(f"    Pre-fetching live data for {len(all_tickers)} stocks...")
+    live_cache = _batch_fetch_live(all_tickers)
+    print(f"    Got live data for {len(live_cache)} stocks")
+
     # ── Score and update all stocks ───────────────────────────────────────────
     rows_to_remove = []
     for idx, row in df.iterrows():
@@ -339,8 +398,9 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
             print(f" REMOVED (timed out)")
             continue
 
-        # Live data
-        live = fetch_live_data(ticker)
+        # Live data from cache
+        live = live_cache.get(ticker, {"price": 0, "prev": 0, "open": 0,
+                                        "day_chg": 0, "gap_pct": 0, "rvol": 0})
 
         # Exclusion: price below $0.50 (we check current price)
         if live["price"] > 0 and live["price"] < MDR_EXCLUDE_PRICE:
