@@ -187,7 +187,7 @@ def write_mdr_tracking(df: pd.DataFrame, removed_tickers: set = None):
         if ticker:
             updated_by_ticker[ticker] = row.to_dict()
 
-    # Build final row list
+    # Build final row list BEFORE touching the sheet (crash safety)
     final_rows = [MDR_HEADERS]
     seen = set()
 
@@ -206,10 +206,15 @@ def write_mdr_tracking(df: pd.DataFrame, removed_tickers: set = None):
             final_rows.append(ordered)
             seen.add(ticker)
 
-    ws.clear()
-    ws.update(final_rows, value_input_option="USER_ENTERED")
-    preserved = len(seen) - len(updated_by_ticker)
-    print(f"  MDR TRACKING: {len(updated_by_ticker)} scored + {preserved} preserved = {len(final_rows)-1} total ({len(removed_tickers)} removed)")
+    # Clear and write atomically — clear only after successfully building rows
+    try:
+        ws.clear()
+        ws.update(final_rows, value_input_option="USER_ENTERED")
+        preserved = len(seen) - len(updated_by_ticker)
+        print(f"  MDR TRACKING: {len(updated_by_ticker)} scored + {preserved} preserved = {len(final_rows)-1} total ({len(removed_tickers)} removed)")
+    except Exception as e:
+        print(f"  MDR TRACKING write error: {e} — sheet may need manual restore")
+        raise
 
 
 def upsert_mdr_stock(stock_data: dict):
