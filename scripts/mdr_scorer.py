@@ -342,12 +342,16 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
         list_date = pd.to_datetime(row.get("MDR LIST DATE", ""), errors="coerce")
         days_on_list = (pd.Timestamp(today) - list_date).days if not pd.isna(list_date) else 1
 
-        # Days since last run
+        # Days since last run — only apply timeout if there IS a recorded run date
         last_run = pd.to_datetime(row.get("LAST RUN DATE", ""), errors="coerce")
-        days_since_run = (pd.Timestamp(today) - last_run).days if not pd.isna(last_run) else 999
+        if pd.isna(last_run):
+            # No run date recorded — don't timeout, stock is still being tracked
+            should_weaken, should_remove = False, False
+            days_since_run = 0
+        else:
+            days_since_run = (pd.Timestamp(today) - last_run).days
+            should_weaken, should_remove = is_timed_out(days_on_list, days_since_run)
 
-        # Check timeout
-        should_weaken, should_remove = is_timed_out(days_on_list, days_since_run)
         if should_remove:
             rows_to_remove.add(ticker)
             print(f" REMOVED (timed out)")
