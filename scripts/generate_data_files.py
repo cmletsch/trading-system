@@ -39,30 +39,44 @@ def build_gainers_json(top_gainers_df: pd.DataFrame, today_runs: list[dict]) -> 
             hp_raw = str(row.get("HIGH PRICE INTRA", "") or "")
             gp_raw = str(row.get("GAIN %/SHARE", "") or "").replace("%", "").strip()
 
-            records.append({
-                "stock":    stock,
-                "date":     dt,
-                "float":    str(row.get("FLOAT", "") or ""),
-                "tod":      str(row.get("TOD", "") or ""),
-                "ti":       str(row.get("TIME IN",  "") or ""),
-                "to":       str(row.get("TIME OUT", "") or ""),
-                "et":       str(row.get("ENTRY TYPE", "") or ""),
-                "ep":       _num(ep_raw),
-                "xp":       _num(xp_raw),
-                "hp":       _num(hp_raw),
-                "ma20":     _num(str(row.get("20 MA",  "") or "")),
-                "ma200":    _num(str(row.get("200 MA", "") or "")),
-                "state":    str(row.get("TYPE OF STATE", "") or ""),
-                "range":    _num(str(row.get("RANGE", "") or "")),
-                "pos":      _num(str(row.get("POSITION", "") or "")),
-                "legs":     _num(str(row.get("# LEGS", "") or "")),
-                "aplus":    str(row.get("A+ OPP?", "") or ""),
-                "news":     str(row.get("NEWS", "") or ""),
-                "newsType": str(row.get("NEWS TYPE", "") or ""),
-                "notes":    str(row.get("NOTES", "") or ""),
-                "ts":       str(row.get("TYPE OF STATE", "") or ""),
-                "mdrWl":    "",
-            })
+            # Normalize gain percent: convert decimal (0.45) → percentage (45)
+        gp_raw_clean = str(gp_raw).replace("%","").strip()
+        try:
+            gp_num = float(gp_raw_clean)
+            # If stored as decimal (abs < 2 and not 0), multiply by 100
+            if gp_num != 0 and abs(gp_num) < 2:
+                gp_num = round(gp_num * 100, 2)
+            gainPct = str(round(gp_num, 2)) + "%"
+        except Exception:
+            gainPct = ""
+
+        records.append({
+            "stock":    stock,
+            "date":     dt,
+            "float":    str(row.get("FLOAT", "") or ""),
+            "tod":      str(row.get("TOD", "") or ""),
+            "ti":       str(row.get("TIME IN",  "") or ""),
+            "to":       str(row.get("TIME OUT", "") or ""),
+            "et":       str(row.get("ENTRY TYPE", "") or ""),
+            "legs":     str(_num(str(row.get("# LEGS", "") or ""))),
+            "aplus":    "Y" if str(row.get("A+ OPP?","")).upper().strip()=="Y" else "N",
+            "runs":     str(row.get("# OF RUNS ON CAL DAY", "") or ""),
+            "state":    str(row.get("TYPE OF STATE", "") or ""),
+            "range":    str(_num(str(row.get("RANGE", "") or ""))),
+            "pos":      str(_num(str(row.get("POSITION", "") or ""))),
+            "ep":       str(_num(ep_raw)),
+            "xp":       str(_num(xp_raw)),
+            "hp":       str(_num(hp_raw)),
+            "ma20":     str(_num(str(row.get("20 MA",  "") or ""))),
+            "ma200":    str(_num(str(row.get("200 MA", "") or ""))),
+            "gainD":    str(_num(str(row.get("GAIN $/SHARE", "") or ""))),
+            "gainPct":  gainPct,
+            "traded":   "N",
+            "notes":    str(row.get("NOTES", "") or ""),
+            "mdrWl":    "",
+            "news":     str(row.get("NEWS", "") or ""),
+            "newsType": str(row.get("NEWS TYPE", "") or ""),
+        })
 
     # Today's new runs (not yet in Google Sheets)
     today_str = date.today().isoformat()
