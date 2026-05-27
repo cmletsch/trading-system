@@ -113,7 +113,7 @@ def main():
 
     # ── STEP 5: Update MDR Watchlist ──────────────────────────────────────────
     top_gainers_df  = read_top_gainers(days_back=365)
-updated_mdr_df, removed_set = update_mdr_watchlist(top_gainers_df, today_runs, news_map)
+    updated_mdr_df, removed_set = update_mdr_watchlist(top_gainers_df, today_runs, news_map)
     write_mdr_tracking(updated_mdr_df, removed_set)
 
     # ── STEP 6: Write data files for dashboard ────────────────────────────────
