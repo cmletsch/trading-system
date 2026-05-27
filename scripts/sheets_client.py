@@ -139,19 +139,77 @@ def read_mdr_tracking() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
-def write_mdr_tracking(df: pd.DataFrame):
-    """Overwrite MDR TRACKING sheet with updated DataFrame."""
+def write_mdr_tracking(df: pd.DataFrame, removed_tickers: set = None):
+    """
+    Upsert MDR TRACKING: update scored stocks, preserve unscored ones,
+    remove only explicitly excluded stocks. Never wipes the full sheet.
+    """
     from config import SHEET_MDR_TRACKING
     ws = get_sheet(SHEET_MDR_TRACKING)
-    ws.clear()
-    # Batch all rows into a single API call to avoid quota limits
-    all_rows = [MDR_HEADERS]
-    for _, row in df.iterrows():
-        ordered = [str(row.get(h, "")) if pd.notna(row.get(h, "")) else "" for h in MDR_HEADERS]
-        all_rows.append(ordered)
-    if all_rows:
+    if removed_tickers is None:
+        removed_tickers = set()
+
+    # Read existing full sheet
+    try:
+        existing_values = ws.get_all_values()
+    except Exception:
+        existing_values = []
+
+    # Empty sheet — write fresh
+    if not existing_values or not any(existing_values[0]):
+        all_rows = [MDR_HEADERS]
+        for _, row in df.iterrows():
+            ordered = [str(row.get(h, "") or "") for h in MDR_HEADERS]
+            all_rows.append(ordered)
         ws.update(all_rows, value_input_option="USER_ENTERED")
-    print(f"  MDR TRACKING updated: {len(df)} rows")
+        print(f"  MDR TRACKING written fresh: {len(df)} rows")
+        return
+
+    # Parse existing sheet
+    existing_headers = [h.strip() for h in existing_values[0]]
+    stock_col = next((i for i, h in enumerate(existing_headers) if h.upper() == "STOCK"), 0)
+
+    # Map existing rows by ticker
+    existing_by_ticker = {}
+    for row in existing_values[1:]:
+        if not row or len(row) <= stock_col:
+            continue
+        ticker = str(row[stock_col]).strip().upper()
+        if not ticker:
+            continue
+        padded = list(row) + [""] * max(0, len(existing_headers) - len(row))
+        existing_by_ticker[ticker] = dict(zip(existing_headers, padded))
+
+    # Map updated/scored rows by ticker
+    updated_by_ticker = {}
+    for _, row in df.iterrows():
+        ticker = str(row.get("STOCK", "") or "").strip().upper()
+        if ticker:
+            updated_by_ticker[ticker] = row.to_dict()
+
+    # Build final row list
+    final_rows = [MDR_HEADERS]
+    seen = set()
+
+    # Add scored/updated stocks first
+    for _, row in df.iterrows():
+        ticker = str(row.get("STOCK", "") or "").strip().upper()
+        if ticker and ticker not in removed_tickers:
+            ordered = [str(row.get(h, "") or "") for h in MDR_HEADERS]
+            final_rows.append(ordered)
+            seen.add(ticker)
+
+    # Preserve existing stocks that were not scored and not removed
+    for ticker, row_dict in existing_by_ticker.items():
+        if ticker not in seen and ticker not in removed_tickers:
+            ordered = [str(row_dict.get(h, "") or "") for h in MDR_HEADERS]
+            final_rows.append(ordered)
+            seen.add(ticker)
+
+    ws.clear()
+    ws.update(final_rows, value_input_option="USER_ENTERED")
+    preserved = len(seen) - len(updated_by_ticker)
+    print(f"  MDR TRACKING: {len(updated_by_ticker)} scored + {preserved} preserved = {len(final_rows)-1} total ({len(removed_tickers)} removed)")
 
 
 def upsert_mdr_stock(stock_data: dict):
