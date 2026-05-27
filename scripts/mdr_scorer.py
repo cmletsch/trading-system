@@ -287,14 +287,28 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
     df = read_mdr_tracking()
     today = date.today()
 
-    # ── Auto-add new stocks from today's runs ─────────────────────────────────
-    today_tickers = list({r["ticker"] for r in today_runs})
+    # ── Auto-add qualifying stocks from full TOP Gainers history ─────────────
+    # Scan ALL historical data (not just today) — same logic as old dashboard:
+    # any stock with 2+ appearances in last 90 days qualifies
     existing_tickers = set(df["STOCK"].str.upper().str.strip().tolist()) if not df.empty else set()
 
+    # Gather all candidate tickers from history + today's runs
+    history_tickers = set()
+    if not top_gainers_df.empty and "STOCK" in top_gainers_df.columns:
+        cutoff = (pd.Timestamp.today() - pd.Timedelta(days=MDR_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+        counts = (
+            top_gainers_df[pd.to_datetime(top_gainers_df["DATE"], errors="coerce")
+                          >= pd.Timestamp(cutoff)]
+            ["STOCK"].astype(str).str.upper().str.strip()
+            .value_counts()
+        )
+        history_tickers = set(counts[counts >= MDR_MIN_DAYS].index)
+
+    today_tickers  = {r["ticker"] for r in today_runs}
+    all_candidates = (history_tickers | today_tickers) - existing_tickers
+
     new_added = 0
-    for ticker in today_tickers:
-        if ticker in existing_tickers:
-            continue
+    for ticker in sorted(all_candidates):
         qual = qualifies_for_watchlist(ticker, top_gainers_df)
         if not qual:
             continue
@@ -315,8 +329,8 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
             "STATE":           qual["latest_state"],
             "RANGE":           qual["latest_range"],
             "POSITION":        qual["latest_pos"],
-            "LAST RUN DATE":   today.isoformat(),
-            "DAYS ON LIST":    "1",
+            "LAST RUN DATE":   qual["latest_date"],
+            "DAYS ON LIST":    str(qual["days_count"]),
             "NEWS TYPE":       news_map.get(ticker, {}).get("news_type", ""),
         })
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
