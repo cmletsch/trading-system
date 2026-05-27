@@ -1,12 +1,12 @@
 """
 Calibrated 2-minute chart FGE/Blast run analysis.
-Uses Finnhub for candle data (1-min resampled to 2-min).
+Uses Polygon.io for candle data (1-min resampled to 2-min).
 Parameters tuned against 5/22/2026 template (84% match).
 """
 
 import pandas as pd
 import numpy as np
-from datetime import date, datetime
+from datetime import date
 import time
 import warnings
 warnings.filterwarnings("ignore")
@@ -22,7 +22,7 @@ from config import (
     PENNY_THRESHOLD, NARROW_MAX, MEDIUM_MAX,
     CONSOL_BARS, CONSOL_FACTOR,
 )
-from finnhub_client import fetch_candles_for_analysis
+from finnhub_client import fetch_candles_polygon_2min, POLY_DELAY
 
 
 # ── SESSION HELPERS ───────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ def tod_label(ts) -> str:
     elif t < 20*60:    return "AH"
     else:              return "PM"
 
-def vol_threshold(ts, is_large: bool, is_very_large: bool) -> float:
+def vol_threshold(ts, is_large, is_very_large) -> float:
     t = ts.hour * 60 + ts.minute
     if   t <  9*60+30: mult = VOL_PM
     elif t < 16*60:    mult = VOL_REG
@@ -134,8 +134,8 @@ def find_all_runs(day_df: pd.DataFrame) -> list[dict]:
         nonlocal run_hod, hod_idx, grace_count
         if entry_idx is None or run_hod is None:
             state = S_SCAN; return
-        ep  = entry_price
-        xp  = round_exit(run_hod)
+        ep = entry_price
+        xp = round_exit(run_hod)
         if ep <= 0 or xp <= ep:
             state = S_SCAN; entry_idx = run_hod = hod_idx = None; grace_count = 0; return
         gain = (xp - ep) / ep * 100
@@ -148,9 +148,8 @@ def find_all_runs(day_df: pd.DataFrame) -> list[dict]:
             (pattern == "Blast" and gain >= APLUS_PCT) or
             (pattern == "FGE" and legs >= APLUS_FGE_LEGS and gain >= APLUS_PCT)
         ) else "N"
-        ma20_e  = ma20[entry_idx]
-        ma200_e = ma200[entry_idx]
-        rng     = calc_range(ma20_e, ma200_e)
+        ma20_e = ma20[entry_idx]; ma200_e = ma200[entry_idx]
+        rng    = calc_range(ma20_e, ma200_e)
         runs.append({
             "entry_time":  times[entry_idx].strftime("%H:%M"),
             "exit_time":   times[hod_idx].strftime("%H:%M") if hod_idx else "",
@@ -190,10 +189,11 @@ def find_all_runs(day_df: pd.DataFrame) -> list[dict]:
             if not np.isnan(ma200[i]) and closes[i] <= ma200[i]: continue
             if ab == 0:
                 if opens[i] <= 0 or body / opens[i] < MIN_BODY_PCT: continue
-                is_large = body / opens[i] >= 0.05
+                is_large      = body / opens[i] >= 0.05
                 is_very_large = body / opens[i] >= 0.10
             else:
-                if not (body >= MIN_BODY_MULT * ab or (body + lower_tail) >= MIN_BODY_MULT * ab): continue
+                if not (body >= MIN_BODY_MULT * ab or
+                        (body + lower_tail) >= MIN_BODY_MULT * ab): continue
             tail_limit = MAX_UPPER_RATIO_BLAST if is_very_large else MAX_UPPER_RATIO
             if upper_tail > body * tail_limit: continue
             vt = vol_threshold(times[i], is_large, is_very_large)
@@ -224,7 +224,8 @@ def find_all_runs(day_df: pd.DataFrame) -> list[dict]:
             else:
                 grace_count = 0
 
-    if state == S_RUN and entry_idx is not None: flush_run(n)
+    if state == S_RUN and entry_idx is not None:
+        flush_run(n)
     return runs
 
 
@@ -233,29 +234,36 @@ def find_all_runs(day_df: pd.DataFrame) -> list[dict]:
 def run_batch_analysis(tickers: list[str], target_date: date = None) -> list[dict]:
     if target_date is None:
         target_date = date.today()
-    print(f"\n[STEP 2] Running 2-min analysis on {len(tickers)} tickers for {target_date}...")
+
+    print(f"\n[STEP 2] Running 2-min analysis on {len(tickers)} tickers "
+          f"for {target_date} via Polygon.io...")
+    print(f"  (Rate limit: 5 calls/min → ~{len(tickers) * POLY_DELAY / 60:.0f} min total)")
+
     all_runs = []
     for idx, ticker in enumerate(tickers, 1):
         print(f"  [{idx:03d}/{len(tickers)}] {ticker:<8}", end="", flush=True)
         try:
-            df = fetch_candles_for_analysis(ticker, target_date)
+            df = fetch_candles_polygon_2min(ticker, target_date)
             if df.empty:
                 print(f"  — no data")
-                continue
-            runs = find_all_runs(df)
-            if runs:
-                for run in runs:
-                    run["ticker"] = ticker
-                    run["date"]   = target_date.isoformat()
-                all_runs.extend(runs)
-                print(f"  {len(runs)} run(s) — " + ", ".join(
-                    f"{r['pct_gain']}% {r['pattern']}" for r in runs[:3]
-                ))
             else:
-                print(f"  — no qualifying run")
+                runs = find_all_runs(df)
+                if runs:
+                    for run in runs:
+                        run["ticker"] = ticker
+                        run["date"]   = target_date.isoformat()
+                    all_runs.extend(runs)
+                    print(f"  {len(runs)} run(s) — " + ", ".join(
+                        f"{r['pct_gain']}% {r['pattern']}" for r in runs[:3]
+                    ))
+                else:
+                    print(f"  — no qualifying run")
         except Exception as e:
             print(f"  — error: {str(e)[:60]}")
-        time.sleep(0.15)   # respect Finnhub rate limit
+
+        # Respect Polygon free tier: 5 calls/minute
+        if idx < len(tickers):
+            time.sleep(POLY_DELAY)
 
     qualifying = [r for r in all_runs if r["pct_gain"] >= MIN_RUN_PCT]
     print(f"\n  Analysis complete: {len(qualifying)} qualifying runs across "
