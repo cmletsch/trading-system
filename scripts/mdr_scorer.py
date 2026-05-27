@@ -4,7 +4,6 @@ Scores stocks on the MDR watchlist, auto-adds qualifying new stocks,
 handles timeouts and exclusions.
 """
 
-import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import date, datetime, timedelta
@@ -27,55 +26,11 @@ from config import (
 
 
 def _batch_fetch_live(tickers: list[str]) -> dict:
-    """Fetch live price data for all tickers in one yfinance batch call."""
-    result = {}
+    """Fetch live price data for all tickers via Finnhub quote endpoint."""
+    from finnhub_client import batch_get_quotes
     if not tickers:
-        return result
-    try:
-        import time as _time
-        raw = yf.download(
-            tickers=" ".join(tickers),
-            period="5d", interval="1d",
-            group_by="ticker",
-            progress=False,
-            threads=False,
-            auto_adjust=True,
-        )
-        if raw.empty:
-            return result
-
-        if isinstance(raw.columns, pd.MultiIndex):
-            ticker_data = {t: raw[t] for t in tickers if t in raw.columns.get_level_values(0)}
-        else:
-            ticker_data = {tickers[0]: raw} if len(tickers) == 1 else {}
-
-        for ticker, hist in ticker_data.items():
-            try:
-                if hist.empty or len(hist) < 1:
-                    continue
-                price  = float(hist["Close"].iloc[-1])
-                prev   = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else price
-                open_p = float(hist["Open"].iloc[-1])
-                avg_vol = hist["Volume"].replace(0, np.nan).mean()
-                cur_vol = float(hist["Volume"].iloc[-1])
-
-                day_chg = ((price - prev) / prev * 100) if prev > 0 else 0
-                gap_pct = ((open_p - prev) / prev * 100) if prev > 0 else 0
-                rvol    = (cur_vol / avg_vol) if avg_vol and avg_vol > 0 else 0
-
-                result[ticker] = {
-                    "price":   round(price,   4),
-                    "prev":    round(prev,    4),
-                    "open":    round(open_p,  4),
-                    "day_chg": round(day_chg, 2),
-                    "gap_pct": round(gap_pct, 2),
-                    "rvol":    round(rvol,    2),
-                }
-            except Exception:
-                pass
-    except Exception as e:
-        print(f"    Batch live fetch failed: {e}")
-    return result
+        return {}
+    return batch_get_quotes(tickers)
 
 def fetch_live_data(ticker: str) -> dict:
     """Fetch current price, rvol, gap, day change for scoring."""
