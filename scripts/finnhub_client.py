@@ -155,3 +155,141 @@ def get_top_gainers_finnhub() -> list[dict]:
     so we fall back to returning empty list (MDR watchlist is the primary source).
     """
     return []
+
+
+# ── ALPHA VANTAGE INTRADAY (for OTC/penny stock candles) ─────────────────────
+
+AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "")
+AV_CALL_DELAY = 13  # seconds between calls (free tier: 5 calls/min)
+
+
+def get_candles_av(ticker: str, target_date: date) -> pd.DataFrame:
+    """
+    Fetch 1-min intraday data from Alpha Vantage for a ticker.
+    Covers OTC/penny stocks that Finnhub free tier doesn't.
+    Rate limit: 5 calls/min on free tier → 13s delay between calls.
+    """
+    if not AV_KEY:
+        return pd.DataFrame()
+    try:
+        resp = requests.get(
+            "https://www.alphavantage.co/query",
+            params={
+                "function":   "TIME_SERIES_INTRADAY",
+                "symbol":     ticker.upper(),
+                "interval":   "1min",
+                "outputsize": "full",
+                "extended_hours": "true",
+                "apikey":     AV_KEY,
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        ts_key = "Time Series (1min)"
+        if ts_key not in data:
+            return pd.DataFrame()
+
+        rows = []
+        target_str = target_date.isoformat()
+        for dt_str, bar in data[ts_key].items():
+            if not dt_str.startswith(target_str):
+                continue
+            rows.append({
+                "timestamp": pd.Timestamp(dt_str),
+                "Open":   float(bar["1. open"]),
+                "High":   float(bar["2. high"]),
+                "Low":    float(bar["3. low"]),
+                "Close":  float(bar["4. close"]),
+                "Volume": float(bar["5. volume"]),
+            })
+
+        if not rows:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(rows).set_index("timestamp")
+        df.index = df.index.tz_localize("America/New_York")
+        df = df.sort_index()
+        return df
+
+    except Exception as e:
+        return pd.DataFrame()
+
+
+def fetch_candles_av_2min(ticker: str, target_date: date) -> pd.DataFrame:
+    """Fetch 1-min from Alpha Vantage, resample to 2-min, add MAs."""
+    df_1 = get_candles_av(ticker, target_date)
+    if df_1.empty:
+        return pd.DataFrame()
+    df_2 = resample_to_2min(df_1)
+    if len(df_2) < 5:
+        return pd.DataFrame()
+    df_2["MA20"]  = df_2["Close"].rolling(20).mean()
+    df_2["MA200"] = df_2["Close"].rolling(200).mean()
+    return df_2
+
+
+# ── POLYGON.IO INTRADAY (primary candle source) ───────────────────────────────
+
+POLYGON_KEY   = os.environ.get("POLYGON_API_KEY", "")
+POLY_DELAY    = 12.5  # seconds between calls (free tier: 5 calls/min)
+
+
+def get_candles_polygon(ticker: str, target_date: date) -> pd.DataFrame:
+    """
+    Fetch 1-min candles from Polygon.io for target_date (full session).
+    Covers OTC/penny stocks. Free tier: 5 calls/min, unlimited daily.
+    """
+    if not POLYGON_KEY:
+        return pd.DataFrame()
+    try:
+        date_str = target_date.isoformat()
+        url = (f"https://api.polygon.io/v2/aggs/ticker/{ticker.upper()}"
+               f"/range/1/minute/{date_str}/{date_str}")
+        resp = requests.get(url, params={
+            "adjusted": "true",
+            "sort":     "asc",
+            "limit":    50000,
+            "apiKey":   POLYGON_KEY,
+        }, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+
+        status = data.get("status", "")
+        if status not in ("OK", "DELAYED") or not data.get("results"):
+            return pd.DataFrame()
+
+        rows = []
+        for bar in data["results"]:
+            ts = pd.Timestamp(bar["t"], unit="ms", utc=True).tz_convert(ET)
+            rows.append({
+                "timestamp": ts,
+                "Open":      float(bar["o"]),
+                "High":      float(bar["h"]),
+                "Low":       float(bar["l"]),
+                "Close":     float(bar["c"]),
+                "Volume":    float(bar["v"]),
+            })
+
+        if not rows:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(rows).set_index("timestamp").sort_index()
+        return df
+
+    except Exception:
+        return pd.DataFrame()
+
+
+def fetch_candles_polygon_2min(ticker: str, target_date: date) -> pd.DataFrame:
+    """Fetch from Polygon, resample to 2-min, add MAs."""
+    df_1 = get_candles_polygon(ticker, target_date)
+    if df_1.empty:
+        return pd.DataFrame()
+    df_2 = resample_to_2min(df_1)
+    if len(df_2) < 5:
+        return pd.DataFrame()
+    df_2["MA20"]  = df_2["Close"].rolling(20).mean()
+    df_2["MA200"] = df_2["Close"].rolling(200).mean()
+    return df_2
