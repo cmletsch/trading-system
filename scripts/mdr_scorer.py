@@ -337,8 +337,11 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
         existing_tickers.add(ticker)
         new_added += 1
 
+    # ── Deduplicate df before scoring ────────────────────────────────────────
+    df = df.drop_duplicates(subset=["STOCK"], keep="last").reset_index(drop=True)
+
     # ── Pre-fetch all live data in one batch ──────────────────────────────────
-    all_tickers = [str(r.get("STOCK","")).strip().upper() for _, r in df.iterrows() if r.get("STOCK")]
+    all_tickers = list(dict.fromkeys([str(r.get("STOCK","")).strip().upper() for _, r in df.iterrows() if r.get("STOCK")]))
     print(f"    Pre-fetching live data for {len(all_tickers)} stocks...")
     live_cache = _batch_fetch_live(all_tickers)
     print(f"    Got live data for {len(live_cache)} stocks")
