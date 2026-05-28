@@ -22,7 +22,8 @@ from config import (
     PENNY_THRESHOLD, NARROW_MAX, MEDIUM_MAX,
     CONSOL_BARS, CONSOL_FACTOR,
 )
-from finnhub_client import fetch_candles_polygon_2min, POLY_DELAY
+from fmp_client import fetch_candles_fmp_2min, FMP_DELAY as POLY_DELAY
+fetch_candles_polygon_2min = fetch_candles_fmp_2min
 
 
 # ── SESSION HELPERS ───────────────────────────────────────────────────────────
@@ -241,7 +242,7 @@ def run_batch_analysis(tickers: list[str], target_date: date = None) -> list[dic
         target_date = date.today()
 
     print(f"\n[STEP 2] Running 2-min analysis on {len(tickers)} tickers "
-          f"for {target_date} via Polygon.io...")
+          f"for {target_date} via FMP...")
     print(f"  (Rate limit: 5 calls/min → ~{len(tickers) * POLY_DELAY / 60:.0f} min total)")
 
     all_runs = []
