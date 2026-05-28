@@ -72,9 +72,23 @@ def fetch_candles_fmp_1min(ticker: str, target_date: date) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def resample_to_2min(df_1min: pd.DataFrame) -> pd.DataFrame:
+    """Resample 1-min OHLCV DataFrame to 2-min bars."""
+    if df_1min.empty:
+        return df_1min
+    df = df_1min.resample("2min").agg({
+        "Open":   "first",
+        "High":   "max",
+        "Low":    "min",
+        "Close":  "last",
+        "Volume": "sum",
+    }).dropna(subset=["Close"])
+    return df
+
+
+
 def fetch_candles_fmp_2min(ticker: str, target_date: date) -> pd.DataFrame:
     """Fetch 1-min bars, resample to 2-min, add MAs."""
-    from run_analysis import resample_to_2min
     df_1 = fetch_candles_fmp_1min(ticker, target_date)
     if df_1.empty:
         return pd.DataFrame()
