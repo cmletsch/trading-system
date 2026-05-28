@@ -22,7 +22,7 @@ from config import (
     PENNY_THRESHOLD, NARROW_MAX, MEDIUM_MAX,
     CONSOL_BARS, CONSOL_FACTOR,
 )
-from fmp_client import fetch_candles_polygon_2min, POLY_DELAY
+from fmp_client import fetch_candles_fmp_2min as fetch_candles_polygon_2min, FMP_DELAY as POLY_DELAY
 
 
 # ── SESSION HELPERS ───────────────────────────────────────────────────────────
