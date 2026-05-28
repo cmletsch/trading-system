@@ -278,6 +278,32 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
         raw_state = safe_get(latest, "TYPE OF STATE", "STATE")
         state_val = raw_state if raw_state.upper() in VALID_STATES else ""
 
+        # Best gain from all rows
+        best_gain_d = ""
+        best_gain_p = ""
+        if "GAIN %/SHARE" in cols:
+            gains = pd.to_numeric(subset["GAIN %/SHARE"], errors="coerce").dropna()
+            if not gains.empty:
+                best_pct = float(gains.max())
+                # Normalize to decimal if stored as percent
+                if best_pct >= 2:
+                    best_pct = round(best_pct / 100, 6)
+                best_gain_p = str(round(best_pct, 6))
+        if "GAIN $/SHARE" in cols:
+            gains_d = pd.to_numeric(subset["GAIN $/SHARE"], errors="coerce").dropna()
+            if not gains_d.empty:
+                best_gain_d = str(round(float(gains_d.max()), 4))
+
+        # Best run stats (highest gain day)
+        best_ti, best_to, best_rt = "", "", ""
+        if "GAIN %/SHARE" in cols and not subset.empty:
+            idx_max = pd.to_numeric(subset["GAIN %/SHARE"], errors="coerce").idxmax()
+            if pd.notna(idx_max):
+                best_row = subset.loc[idx_max]
+                best_ti = safe_get(best_row, "TIME IN")
+                best_to = safe_get(best_row, "TIME OUT")
+                best_rt = safe_get(best_row, "RUN TIME", "TRADE TIME")
+
         return {
             "days_count":   len(subset),
             "escalating":   escalating,
@@ -293,6 +319,11 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
             "latest_ma200": safe_get(latest, "200 MA", "MA200"),
             "float":        safe_get(latest, "FLOAT"),
             "entry_type":   entry_type,
+            "best_gain_p":  best_gain_p,
+            "best_gain_d":  best_gain_d,
+            "best_ti":      best_ti,
+            "best_to":      best_to,
+            "best_rt":      best_rt,
         }
     except Exception as e:
         print(f"    Warning: could not build qual data for {ticker}: {e}")
@@ -350,6 +381,9 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
             "INITIAL BO DATE": qual["latest_date"],
             "MDR LIST DATE":   today.isoformat(),
             "ENTRY TYPE":      qual["entry_type"],
+            "ENTRY TIME":      qual["best_ti"],
+            "EXIT TIME":       qual["best_to"],
+            "TRADE TIME":      qual["best_rt"],
             "FLOAT":           qual["float"],
             "ENTRY PRICE":     qual["latest_entry"],
             "EXIT PRICE":      qual["latest_exit"],
@@ -359,6 +393,8 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
             "STATE":           qual["latest_state"],
             "RANGE":           qual["latest_range"],
             "POSITION":        qual["latest_pos"],
+            "GAIN $/SHARE":    qual["best_gain_d"],
+            "GAIN %/SHARE":    qual["best_gain_p"],
             "LAST RUN DATE":   qual["latest_date"],
             "DAYS ON LIST":    str(qual["days_count"]),
             "NEWS TYPE":       news_map.get(ticker, {}).get("news_type", ""),
@@ -434,15 +470,27 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
 
         tier = get_tier(score)
 
-        # Update last run date if stock ran today
+        # Update all fields when stock runs today
         if ticker in {r["ticker"] for r in today_runs}:
             df.at[idx, "LAST RUN DATE"] = today.isoformat()
+            qual2 = qualifies_for_watchlist(ticker, top_gainers_df)
+            if qual2:
+                if qual2["latest_entry"]: df.at[idx, "ENTRY PRICE"]  = qual2["latest_entry"]
+                if qual2["latest_exit"]:  df.at[idx, "EXIT PRICE"]   = qual2["latest_exit"]
+                if qual2["best_gain_p"]:  df.at[idx, "GAIN %/SHARE"] = qual2["best_gain_p"]
+                if qual2["best_gain_d"]:  df.at[idx, "GAIN $/SHARE"] = qual2["best_gain_d"]
+                if qual2["best_ti"]:      df.at[idx, "ENTRY TIME"]   = qual2["best_ti"]
+                if qual2["best_to"]:      df.at[idx, "EXIT TIME"]    = qual2["best_to"]
+                if qual2["best_rt"]:      df.at[idx, "TRADE TIME"]   = qual2["best_rt"]
+                if qual2["latest_ma20"]:  df.at[idx, "20 MA"]        = qual2["latest_ma20"]
+                if qual2["latest_ma200"]: df.at[idx, "200 MA"]       = qual2["latest_ma200"]
+                if qual2["float"]:        df.at[idx, "FLOAT"]        = qual2["float"]
 
-        # Write back
-        df.at[idx, "MDR SCORE"]   = score
-        df.at[idx, "TIER"]        = tier
+        # Write back scores and news
+        df.at[idx, "MDR SCORE"]    = score
+        df.at[idx, "TIER"]         = tier
         df.at[idx, "DAYS ON LIST"] = days_on_list
-        df.at[idx, "NEWS TYPE"]   = news_cat or row.get("NEWS TYPE", "")
+        df.at[idx, "NEWS TYPE"]    = news_cat or row.get("NEWS TYPE", "")
 
         print(f" score={score} → {tier}")
 
