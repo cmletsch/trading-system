@@ -189,10 +189,6 @@ def get_candles_av(ticker: str, target_date: date) -> pd.DataFrame:
 
         ts_key = "Time Series (1min)"
         if ts_key not in data:
-            # Print first key to diagnose API response
-            keys = list(data.keys())[:2]
-            first_val = str(list(data.values())[0])[:80] if data else "empty"
-            print(f" [AV:{keys}:{first_val}]", end="")
             return pd.DataFrame()
 
         # Find all dates available in response
