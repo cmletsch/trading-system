@@ -64,7 +64,7 @@ def build_top_gainers_rows(runs: list[dict], news_map: dict) -> list[dict]:
             "DATE":                  today.isoformat(),
             "DAY OF WEEK":           today.strftime("%A"),
             "STOCK":                 ticker,
-            "FLOAT":                 "",
+            "FLOAT":                 run.get("float", ""),
             "TOD":                   run.get("tod", ""),
             "TIME IN":               run.get("entry_time", ""),
             "TIME OUT":              run.get("exit_time",  ""),
