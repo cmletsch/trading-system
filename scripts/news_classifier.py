@@ -4,25 +4,45 @@ Fetches recent headlines for a ticker via yfinance and classifies
 into one of 7 categories using keyword matching.
 """
 
-import yfinance as yf
+import os
+import requests
+from datetime import date, timedelta
 from config import NEWS_KEYWORDS, NEWS_SCORES
+
+FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY", "")
 
 
 def fetch_news(ticker: str) -> list[dict]:
-    """Fetch recent news headlines for a ticker via yfinance."""
+    """Fetch recent news headlines via Finnhub company-news endpoint."""
+    if not FINNHUB_KEY:
+        return []
     try:
-        t = yf.Ticker(ticker)
-        news = t.news
-        if not news:
+        today = date.today()
+        from_date = (today - timedelta(days=7)).isoformat()
+        to_date = today.isoformat()
+        resp = requests.get(
+            "https://finnhub.io/api/v1/company-news",
+            params={
+                "symbol": ticker.upper(),
+                "from":   from_date,
+                "to":     to_date,
+                "token":  FINNHUB_KEY,
+            },
+            timeout=10,
+        )
+        if not resp.ok:
+            return []
+        items = resp.json()
+        if not items or not isinstance(items, list):
             return []
         results = []
-        for item in news[:5]:  # top 5 headlines
-            title = item.get("title", "") or ""
-            summary = item.get("summary", "") or ""
+        for item in items[:5]:
+            headline = item.get("headline", "") or ""
+            summary  = item.get("summary",  "") or ""
             results.append({
-                "title": title,
+                "title":   headline,
                 "summary": summary,
-                "text": f"{title} {summary}".lower(),
+                "text":    f"{headline} {summary}".lower(),
             })
         return results
     except Exception:
