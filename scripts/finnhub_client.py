@@ -301,9 +301,12 @@ def fetch_candles_polygon_2min(ticker: str, target_date: date) -> pd.DataFrame:
     """Fetch from Polygon, resample to 2-min, add MAs."""
     df_1 = get_candles_polygon(ticker, target_date)
     if df_1.empty:
+        print(f" [poly_empty]", end="")
         return pd.DataFrame()
+    print(f" [poly_1m:{len(df_1)}bars]", end="")
     df_2 = resample_to_2min(df_1)
     if len(df_2) < 5:
+        print(f" [2m_only_{len(df_2)}bars]", end="")
         return pd.DataFrame()
     df_2["MA20"]  = df_2["Close"].rolling(20).mean()
     df_2["MA200"] = df_2["Close"].rolling(200).mean()
