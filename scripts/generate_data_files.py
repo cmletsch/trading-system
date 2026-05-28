@@ -175,8 +175,9 @@ def build_mdr_json(mdr_df: pd.DataFrame) -> dict:
                 "legs":     _num(str(row.get("# LEGS",   "") or "")),
                 "score":    _num(str(row.get("MDR SCORE", "") or "")),
                 "tier":     str(row.get("TIER", "") or ""),
-                "days":     _num(str(row.get("DAYS ON LIST", "") or "")),
-                "newsType": str(row.get("NEWS TYPE", "") or ""),
+                "days":        _num(str(row.get("DAYS ON LIST", "") or "")),
+                "newsType":    str(row.get("NEWS TYPE", "") or ""),
+                "lastRunDate": str(row.get("LAST RUN DATE", "") or "")[:10],
             })
     return {
         "updated": datetime.utcnow().isoformat() + "Z",
@@ -265,9 +266,26 @@ def build_watchlist_payload(mdr_df: pd.DataFrame,
                     exits2[i] > exits2[i-1] for i in range(1, len(exits2))
                 )
 
+            # Build dates list from TOP Gainers history for this stock
+            stock_dates = []
+            if not top_gainers_df.empty and "STOCK" in top_gainers_df.columns and "DATE" in top_gainers_df.columns:
+                try:
+                    mask = top_gainers_df["STOCK"].astype(str).str.upper().str.strip() == sym
+                    stock_rows = top_gainers_df[mask]
+                    unique_dates = sorted(set(
+                        str(d)[:10] for d in pd.to_datetime(stock_rows["DATE"], errors="coerce").dropna()
+                    ))
+                    stock_dates = unique_dates[-90:]  # last 90 unique days
+                except Exception:
+                    stock_dates = []
+
+            added_date = str(row.get("MDR LIST DATE", "") or date.today().strftime("%a %b %d %Y"))
+            last_run = str(row.get("LAST RUN DATE", "") or "")[:10]
+
             stocks.append({
                 "sym":        sym,
                 "days":       int(days),
+                "dates":      stock_dates,
                 "firstEntry": first_entry,
                 "lastExit":   last_exit,
                 "bestGain":   best_gain,
@@ -276,8 +294,8 @@ def build_watchlist_payload(mdr_df: pd.DataFrame,
                 "maxLegs":    int(max_legs) if max_legs else None,
                 "mdrTag":     "MDR",
                 "escalating": escalating,
-                "addedDate":  str(row.get("MDR LIST DATE", "") or
-                                  date.today().strftime("%a %b %d %Y")),
+                "addedDate":  added_date,
+                "lastRunDate": last_run,
             })
 
     return {
