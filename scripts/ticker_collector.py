@@ -18,60 +18,20 @@ from config import (
     YF_GAINERS_COUNT, YF_MIN_GAIN_PCT, YF_MIN_PRICE, YF_MAX_PRICE
 )
 
-AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "")
 
 
-# ── SOURCE 1: Alpha Vantage Top Gainers ───────────────────────────────────────
+# ── SOURCE 1: FMP Top Gainers ────────────────────────────────────────────────
 
 def fetch_top_gainers() -> list[dict]:
-    """
-    Pull today's top gainers from Alpha Vantage.
-    Free tier: 25 calls/day. We use 1 call.
-    Endpoint returns top 20 gainers with symbol, price, change%.
-    """
-    print("  [Source 1] Fetching top gainers via Alpha Vantage...")
-
-    if not AV_KEY:
-        print("    ALPHA_VANTAGE_KEY not set — skipping")
-        return []
-
+    """Pull today's top gainers from FMP."""
+    print("  [Source 1] Fetching top gainers via FMP...")
     try:
-        resp = requests.get(
-            "https://www.alphavantage.co/query",
-            params={"function": "TOP_GAINERS_LOSERS", "apikey": AV_KEY},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        gainers = data.get("top_gainers", [])
-        result  = []
-        for g in gainers:
-            symbol   = str(g.get("ticker", "") or "").strip().upper()
-            price    = float(str(g.get("price", 0)).replace(",", "") or 0)
-            gain_pct = float(str(g.get("change_percentage", "0%")).replace("%","").replace(",","") or 0)
-            if not symbol or not symbol.replace("-","").isalpha() or len(symbol) > 6:
-                continue
-            if gain_pct < YF_MIN_GAIN_PCT:
-                continue
-            if price < YF_MIN_PRICE or price > YF_MAX_PRICE:
-                continue
-            result.append({
-                "ticker":   symbol,
-                "gain_pct": round(gain_pct, 2),
-                "price":    round(price, 4),
-                "source":   "ALPHA_VANTAGE",
-            })
-
-        print(f"    Found {len(result)} qualifying gainers")
-        return result
-
+        from fmp_client import fetch_top_gainers_fmp
+        return fetch_top_gainers_fmp()
     except Exception as e:
-        print(f"    Alpha Vantage failed: {e}")
+        print(f"    FMP error: {e}")
         return []
 
-
-# ── SOURCE 2: MDR Watchlist ───────────────────────────────────────────────────
 
 def fetch_mdr_watchlist() -> list[dict]:
     """Pull active tickers from MDR TRACKING sheet."""
