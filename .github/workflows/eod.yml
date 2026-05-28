@@ -37,6 +37,7 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SPREADSHEET_ID:     ${{ secrets.SPREADSHEET_ID }}
           FMP_API_KEY:        ${{ secrets.FMP_API_KEY }}
+          POLYGON_API_KEY:    ${{ secrets.POLYGON_API_KEY }}
         run: python scripts/eod_update.py
 
       - name: Commit data files to GitHub
