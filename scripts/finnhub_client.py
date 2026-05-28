@@ -191,10 +191,17 @@ def get_candles_av(ticker: str, target_date: date) -> pd.DataFrame:
         if ts_key not in data:
             return pd.DataFrame()
 
-        rows = []
+        # Find all dates available in response
+        available_dates = sorted(set(dt[:10] for dt in data[ts_key].keys()), reverse=True)
         target_str = target_date.isoformat()
+        # Use target date if available, otherwise use most recent trading day
+        use_date = target_str if target_str in available_dates else (available_dates[0] if available_dates else target_str)
+        if use_date != target_str:
+            print(f" (using {use_date} — no data for {target_str})", end="")
+
+        rows = []
         for dt_str, bar in data[ts_key].items():
-            if not dt_str.startswith(target_str):
+            if not dt_str.startswith(use_date):
                 continue
             rows.append({
                 "timestamp": pd.Timestamp(dt_str),
