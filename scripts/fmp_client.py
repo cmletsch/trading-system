@@ -1,25 +1,26 @@
 """
-fmp_client.py — Financial Modeling Prep API client
-Replaces: Polygon (candles), Alpha Vantage (gainers), Finnhub (quotes/news/float)
-Plan: Starter ($19/mo) — 300 calls/min, 1-min intraday, US coverage
+fmp_client.py — Financial Modeling Prep API (Stable endpoints)
+Plan: Starter ($19/mo) — gainers, quotes, news, float, profile
+NOTE: Intraday candles require Premium+ — use Polygon for candles
 """
 import os
 import time
 import requests
 import pandas as pd
-import numpy as np
 import pytz
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
-FMP_KEY  = os.environ.get("FMP_API_KEY", "")
-BASE_URL = "https://financialmodelingprep.com/api/v3"
-ET       = pytz.timezone("America/New_York")
-FMP_DELAY = 0.21  # ~300 calls/min = 0.2s between calls
+FMP_KEY   = os.environ.get("FMP_API_KEY", "")
+BASE_URL  = "https://financialmodelingprep.com/stable"
+FMP_DELAY = 0.21   # 300 calls/min = 0.2s between calls
+
+ET = pytz.timezone("America/New_York")
+
 
 def _get(endpoint: str, params: dict = None) -> dict | list:
-    """Raw GET with error handling."""
+    """Raw GET against the stable API with error reporting."""
     if not FMP_KEY:
-        print(f"  [FMP] No API key set")
+        print("  [FMP] No API key set")
         return {}
     p = {"apikey": FMP_KEY}
     if params:
@@ -28,9 +29,8 @@ def _get(endpoint: str, params: dict = None) -> dict | list:
         resp = requests.get(f"{BASE_URL}/{endpoint}", params=p, timeout=15)
         if resp.status_code == 200:
             data = resp.json()
-            # Check for FMP error messages
             if isinstance(data, dict) and ("Error Message" in data or "message" in data):
-                print(f"  [FMP ERROR] {endpoint}: {data.get('Error Message') or data.get('message','')[:80]}")
+                print(f"  [FMP ERROR] {endpoint}: {(data.get('Error Message') or data.get('message',''))[:80]}")
                 return {}
             return data
         else:
@@ -41,79 +41,11 @@ def _get(endpoint: str, params: dict = None) -> dict | list:
         return {}
 
 
-# ── CANDLES ───────────────────────────────────────────────────────────────────
-
-def fetch_candles_fmp_1min(ticker: str, target_date: date) -> pd.DataFrame:
-    """Fetch 1-min bars from FMP, return ET-indexed OHLCV DataFrame."""
-    if not FMP_KEY:
-        return pd.DataFrame()
-    try:
-        date_str = target_date.isoformat()
-        data = _get(f"historical-chart/1min/{ticker.upper()}", {
-            "from": date_str,
-            "to":   date_str,
-        })
-        if not data or not isinstance(data, list):
-            return pd.DataFrame()
-
-        rows = []
-        for bar in data:
-            try:
-                ts = pd.Timestamp(bar["date"]).tz_localize(ET)
-                rows.append({
-                    "timestamp": ts,
-                    "Open":   float(bar["open"]),
-                    "High":   float(bar["high"]),
-                    "Low":    float(bar["low"]),
-                    "Close":  float(bar["close"]),
-                    "Volume": float(bar.get("volume", 0)),
-                })
-            except Exception:
-                continue
-
-        if not rows:
-            return pd.DataFrame()
-
-        df = pd.DataFrame(rows).set_index("timestamp").sort_index()
-        return df
-
-    except Exception:
-        return pd.DataFrame()
-
-
-def resample_to_2min(df_1min: pd.DataFrame) -> pd.DataFrame:
-    """Resample 1-min OHLCV DataFrame to 2-min bars."""
-    if df_1min.empty:
-        return df_1min
-    df = df_1min.resample("2min").agg({
-        "Open":   "first",
-        "High":   "max",
-        "Low":    "min",
-        "Close":  "last",
-        "Volume": "sum",
-    }).dropna(subset=["Close"])
-    return df
-
-
-
-def fetch_candles_fmp_2min(ticker: str, target_date: date) -> pd.DataFrame:
-    """Fetch 1-min bars, resample to 2-min, add MAs."""
-    df_1 = fetch_candles_fmp_1min(ticker, target_date)
-    if df_1.empty:
-        return pd.DataFrame()
-    df_2 = resample_to_2min(df_1)
-    if len(df_2) < 5:
-        return pd.DataFrame()
-    df_2["MA20"]  = df_2["Close"].rolling(20).mean()
-    df_2["MA200"] = df_2["Close"].rolling(200).mean()
-    return df_2
-
-
 # ── TOP GAINERS ───────────────────────────────────────────────────────────────
 
 def fetch_top_gainers_fmp() -> list[dict]:
-    """Fetch today's top % gainers from FMP."""
-    data = _get("stock_market/gainers")
+    """Fetch today's top % gainers (Starter plan supported)."""
+    data = _get("biggest-gainers")
     if not data or not isinstance(data, list):
         return []
     results = []
@@ -123,11 +55,11 @@ def fetch_top_gainers_fmp() -> list[dict]:
         change = float(item.get("changesPercentage", 0) or 0)
         if sym and price >= 0.50 and change >= 10:
             results.append({
-                "ticker":      sym,
-                "price":       price,
-                "change_pct":  change,
-                "volume":      int(item.get("volume", 0) or 0),
-                "source":      "FMP_GAINERS",
+                "ticker":     sym,
+                "price":      price,
+                "change_pct": change,
+                "volume":     int(item.get("volume", 0) or 0),
+                "source":     "FMP_GAINERS",
             })
     print(f"    Found {len(results)} qualifying gainers")
     return results[:20]
@@ -136,16 +68,15 @@ def fetch_top_gainers_fmp() -> list[dict]:
 # ── LIVE QUOTES (batch) ───────────────────────────────────────────────────────
 
 def batch_fetch_live_data_fmp(tickers: list[str]) -> dict:
-    """Fetch live quotes for a list of tickers. Returns {ticker: {price, chg, vol}}."""
+    """Batch quotes — {ticker: {price, chg_pct, volume}}. Starter supported."""
     if not tickers or not FMP_KEY:
         return {}
     results = {}
-    # FMP allows batch quotes: /quote/AAPL,MSFT,GOOG
     chunk_size = 50
     for i in range(0, len(tickers), chunk_size):
         chunk = tickers[i:i + chunk_size]
         sym_str = ",".join(chunk)
-        data = _get(f"quote/{sym_str}")
+        data = _get("quote", {"symbol": sym_str})
         if not data or not isinstance(data, list):
             continue
         for item in data:
@@ -162,15 +93,24 @@ def batch_fetch_live_data_fmp(tickers: list[str]) -> dict:
 
 # ── FLOAT / PROFILE ───────────────────────────────────────────────────────────
 
+def _valid_float(val: str) -> str:
+    """Return numeric float string or empty if invalid (rejects time strings etc.)."""
+    try:
+        v = float(str(val).replace("M", "").strip())
+        return str(round(v, 2)) if v > 0 else ""
+    except (ValueError, TypeError):
+        return ""
+
+
 def fetch_float_fmp(ticker: str) -> str:
-    """Fetch share float from FMP company profile."""
-    data = _get(f"profile/{ticker.upper()}")
+    """Fetch share float from FMP profile. Starter supported."""
+    data = _get("profile", {"symbol": ticker.upper()})
     if not data or not isinstance(data, list) or not data[0]:
         return ""
     try:
         shares = data[0].get("floatShares") or data[0].get("sharesOutstanding")
         if shares and float(shares) > 0:
-            return str(round(float(shares) / 1_000_000, 2))  # in millions
+            return str(round(float(shares) / 1_000_000, 2))
     except Exception:
         pass
     return ""
@@ -188,9 +128,9 @@ def fetch_floats_batch_fmp(tickers: list[str]) -> dict[str, str]:
 # ── NEWS ──────────────────────────────────────────────────────────────────────
 
 def fetch_news_fmp(ticker: str) -> list[dict]:
-    """Fetch recent news from FMP."""
-    data = _get("stock_news", {
-        "tickers": ticker.upper(),
+    """Fetch recent news. Starter supported."""
+    data = _get("news/stock", {
+        "symbols": ticker.upper(),
         "limit":   5,
     })
     if not data or not isinstance(data, list):
@@ -198,10 +138,77 @@ def fetch_news_fmp(ticker: str) -> list[dict]:
     results = []
     for item in data:
         title   = str(item.get("title",   "") or "")
-        summary = str(item.get("text",    "") or "")
+        summary = str(item.get("text",    "") or item.get("content", "") or "")
         results.append({
             "title":   title,
             "summary": summary,
             "text":    f"{title} {summary}".lower(),
         })
     return results
+
+
+# ── 1-MIN CANDLES (stable API) ────────────────────────────────────────────────
+
+def _resample_to_2min(df_1m: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate 1-min bars to 2-min OHLCV."""
+    return df_1m.resample("2min").agg({
+        "Open": "first", "High": "max",
+        "Low":  "min",   "Close": "last", "Volume": "sum",
+    }).dropna(subset=["Open"])
+
+
+def fetch_candles_fmp_1min(ticker: str, target_date: date) -> pd.DataFrame:
+    """Fetch 1-min bars from FMP stable API."""
+    if not FMP_KEY:
+        return pd.DataFrame()
+    try:
+        date_str = target_date.isoformat()
+        data = _get("historical-chart/1min", {
+            "symbol": ticker.upper(),
+            "from":   date_str,
+            "to":     date_str,
+        })
+        if not data or not isinstance(data, list):
+            return pd.DataFrame()
+
+        # Find most recent available date if target not present
+        available = sorted(set(b["date"][:10] for b in data if "date" in b), reverse=True)
+        use_date  = date_str if date_str in available else (available[0] if available else date_str)
+
+        rows = []
+        for bar in data:
+            if not str(bar.get("date","")).startswith(use_date):
+                continue
+            try:
+                ts = pd.Timestamp(bar["date"]).tz_localize(ET)
+                rows.append({
+                    "timestamp": ts,
+                    "Open":   float(bar["open"]),
+                    "High":   float(bar["high"]),
+                    "Low":    float(bar["low"]),
+                    "Close":  float(bar["close"]),
+                    "Volume": float(bar.get("volume", 0)),
+                })
+            except Exception:
+                continue
+
+        if not rows:
+            return pd.DataFrame()
+        return pd.DataFrame(rows).set_index("timestamp").sort_index()
+
+    except Exception as e:
+        print(f" [FMP_CANDLE_ERR:{str(e)[:50]}]", end="")
+        return pd.DataFrame()
+
+
+def fetch_candles_fmp_2min(ticker: str, target_date: date) -> pd.DataFrame:
+    """Fetch 1-min bars, resample to 2-min, add MAs."""
+    df_1 = fetch_candles_fmp_1min(ticker, target_date)
+    if df_1.empty:
+        return pd.DataFrame()
+    df_2 = _resample_to_2min(df_1)
+    if len(df_2) < 5:
+        return pd.DataFrame()
+    df_2["MA20"]  = df_2["Close"].rolling(20).mean()
+    df_2["MA200"] = df_2["Close"].rolling(200).mean()
+    return df_2
