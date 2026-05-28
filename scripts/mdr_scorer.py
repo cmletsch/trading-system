@@ -27,7 +27,7 @@ from config import (
 
 def _batch_fetch_live(tickers: list[str]) -> dict:
     """Fetch live price data for all tickers via Finnhub quote endpoint."""
-    from finnhub_client import batch_get_quotes
+    from fmp_client import batch_fetch_live_data_fmp as batch_get_quotes
     if not tickers:
         return {}
     return batch_get_quotes(tickers)
