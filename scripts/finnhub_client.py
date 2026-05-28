@@ -277,7 +277,7 @@ def get_candles_polygon(ticker: str, target_date: date) -> pd.DataFrame:
 
         rows = []
         for bar in data["results"]:
-            ts = pd.Timestamp(bar["t"], unit="ms", utc=True).tz_convert(ET)
+            ts = pd.Timestamp(bar["t"], unit="ms").tz_localize("UTC").tz_convert(ET)
             rows.append({
                 "timestamp": ts,
                 "Open":      float(bar["o"]),
