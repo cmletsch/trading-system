@@ -44,6 +44,7 @@ from sheets_client      import (
     write_mdr_tracking, export_all_to_excel,
     TOP_GAINERS_HEADERS,
 )
+from fmp_client         import batch_fetch_live_data_fmp, fetch_floats_batch_fmp
 from generate_data_files import (
     build_gainers_json, build_mdr_json,
     build_watchlist_payload, update_netlify_watchlist,
@@ -107,7 +108,7 @@ def main():
         return
 
     # ── STEP 2: Run 2-min analysis on AV gainers + SCAN LOG tickers ────────────
-    # Polygon Starter = unlimited calls, so analyze everything from both sources
+    # FMP — analyze scan log + AV gainers
     from ticker_collector import collect_gainers_only, fetch_scan_log, fetch_csv_drop
     av_tickers   = collect_gainers_only()
     scan_tickers = [t["ticker"] for t in fetch_scan_log()]
