@@ -78,7 +78,20 @@ def build_gainers_json(top_gainers_df: pd.DataFrame, today_runs: list[dict]) -> 
             })
 
     # Today's new runs (not yet in Google Sheets)
-    today_str = date.today().isoformat()
+    # Use trading date (same as eod_update uses) to avoid duplicate records
+    try:
+        from datetime import timedelta
+        import pytz
+        _et  = pytz.timezone("America/New_York")
+        _now = datetime.now(_et)
+        _d   = _now.date()
+        if _now.hour < 16:
+            _d -= timedelta(days=1)
+        while _d.weekday() >= 5:
+            _d -= timedelta(days=1)
+        today_str = _d.isoformat()
+    except Exception:
+        today_str = date.today().isoformat()
     existing_keys = {(r["stock"], r["date"], r["ti"]) for r in records}
 
     for run in today_runs:
@@ -87,24 +100,34 @@ def build_gainers_json(top_gainers_df: pd.DataFrame, today_runs: list[dict]) -> 
         key    = (ticker, today_str, ti)
         if key in existing_keys:
             continue
+        ep = run.get("price_entry", "")
+        xp = run.get("price_exit",  "")
+        try:
+            _gain_d = round(float(xp) - float(ep), 4) if ep and xp else ""
+            _gain_p = str(round(float(run.get("pct_gain", 0)), 2)) + "%" if run.get("pct_gain") else ""
+        except Exception:
+            _gain_d, _gain_p = "", ""
         records.append({
             "stock":    ticker,
             "date":     today_str,
-            "float":    "",
+            "float":    str(run.get("float", "") or ""),
             "tod":      run.get("tod", ""),
             "ti":       ti,
             "to":       run.get("exit_time", ""),
             "et":       run.get("pattern", ""),
-            "ep":       run.get("price_entry", ""),
-            "xp":       run.get("price_exit",  ""),
-            "hp":       run.get("price_hod",   ""),
-            "ma20":     run.get("ma20",  ""),
-            "ma200":    run.get("ma200", ""),
+            "ep":       str(ep),
+            "xp":       str(xp),
+            "hp":       str(run.get("price_hod", "")),
+            "ma20":     str(run.get("ma20",  "")),
+            "ma200":    str(run.get("ma200", "")),
+            "gainD":    str(_gain_d),
+            "gainPct":  _gain_p,
             "state":    run.get("state", ""),
             "range":    run.get("range", ""),
             "pos":      run.get("position", ""),
             "legs":     run.get("legs", ""),
             "aplus":    run.get("aplus", "N"),
+            "traded":   "N",
             "news":     "",
             "newsType": "",
             "notes":    "",
