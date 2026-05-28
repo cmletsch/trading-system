@@ -260,16 +260,16 @@ def get_candles_polygon(ticker: str, target_date: date) -> pd.DataFrame:
             "limit":    50000,
             "apiKey":   POLYGON_KEY,
         }, timeout=15)
-        resp.raise_for_status()
+        # Show HTTP status for diagnosis
+        if resp.status_code != 200:
+            print(f" [HTTP {resp.status_code}: {resp.text[:80]}]", end="")
+            return pd.DataFrame()
         data = resp.json()
-
         status = data.get("status", "")
         results_count = len(data.get("results", []))
         if status not in ("OK", "DELAYED") or not data.get("results"):
-            # Show diagnostic for first few failures
             msg = f"status={status} results={results_count}"
-            if "error" in data: msg += f" err={data['error']}"
-            if "message" in data: msg += f" msg={str(data['message'])[:60]}"
+            if "message" in data: msg += f" {str(data.get('message',''))[:60]}"
             print(f" [{msg}]", end="")
             return pd.DataFrame()
 
