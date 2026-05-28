@@ -194,14 +194,14 @@ def write_mdr_tracking(df: pd.DataFrame, removed_tickers: set = None):
     for _, row in df.iterrows():
         ticker = str(row.get("STOCK", "") or "").strip().upper()
         if ticker and ticker not in removed_tickers:
-            ordered = [str(row.get(h, "") or "") for h in MDR_HEADERS]
+            ordered = [("" if (row.get(h) is None or str(row.get(h,"")).strip() == "" or str(row.get(h,"")).strip() == "nan") else str(row.get(h,""))) for h in MDR_HEADERS]
             final_rows.append(ordered)
             seen.add(ticker)
 
     # Preserve existing stocks that were not scored and not removed
     for ticker, row_dict in existing_by_ticker.items():
         if ticker not in seen and ticker not in removed_tickers:
-            ordered = [str(row_dict.get(h, "") or "") for h in MDR_HEADERS]
+            ordered = [("" if (row_dict.get(h) is None or str(row_dict.get(h,"")).strip() == "" or str(row_dict.get(h,"")).strip() == "nan") else str(row_dict.get(h,""))) for h in MDR_HEADERS]
             final_rows.append(ordered)
             seen.add(ticker)
 
