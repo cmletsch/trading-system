@@ -241,6 +241,7 @@ def fetch_candles_av_2min(ticker: str, target_date: date) -> pd.DataFrame:
 
 POLYGON_KEY   = os.environ.get("POLYGON_API_KEY", "")
 POLY_DELAY    = 12.5  # seconds between calls (free tier: 5 calls/min)
+print(f"  [Polygon key loaded: {'YES' if POLYGON_KEY else 'NO - POLYGON_API_KEY env var not set'}]")
 
 
 def get_candles_polygon(ticker: str, target_date: date) -> pd.DataFrame:
@@ -249,6 +250,7 @@ def get_candles_polygon(ticker: str, target_date: date) -> pd.DataFrame:
     Covers OTC/penny stocks. Free tier: 5 calls/min, unlimited daily.
     """
     if not POLYGON_KEY:
+        print(f" [NO POLYGON KEY]", end="")
         return pd.DataFrame()
     try:
         date_str = target_date.isoformat()
