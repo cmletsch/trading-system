@@ -56,12 +56,16 @@ def round_exit(price: float) -> float:
     return round(np.floor(round(price / step, 6)) * step, 4)
 
 def calc_range(ma20, ma200):
-    if np.isnan(ma20) or np.isnan(ma200) or max(ma20, ma200) == 0:
+    if np.isnan(ma20) or ma20 == 0:
+        return None
+    if np.isnan(ma200):
+        return None  # will trigger narrow default
+    if max(ma20, ma200) == 0:
         return None
     return abs(ma20 - ma200) / max(ma20, ma200)
 
 def calc_state(rng) -> str:
-    if rng is None:       return "N/A"
+    if rng is None:       return "NARROW"  # default when MAs unavailable
     if rng < NARROW_MAX:  return "NARROW"
     if rng < MEDIUM_MAX:  return "MEDIUM"
     return "WIDE"
@@ -74,7 +78,8 @@ def calc_position(entry_price, ma20):
     return 3
 
 def calc_ma_align(ma20, ma200) -> str:
-    if np.isnan(ma20) or np.isnan(ma200): return "N/A"
+    if np.isnan(ma20): return "UNKNOWN"
+    if np.isnan(ma200): return "BULL" if ma20 > 0 else "UNKNOWN"  # assume bull if only 20MA available
     return "BULL" if ma20 > ma200 else "BEAR"
 
 
@@ -163,8 +168,8 @@ def find_all_runs(day_df: pd.DataFrame) -> list[dict]:
             "pattern":     pattern,
             "legs":        legs,
             "aplus":       aplus,
-            "ma20":        round(ma20_e, 4)  if not np.isnan(ma20_e)  else "N/A",
-            "ma200":       round(ma200_e, 4) if not np.isnan(ma200_e) else "N/A",
+            "ma20":        round(ma20_e, 4)  if not np.isnan(ma20_e)  else "",
+            "ma200":       round(ma200_e, 4) if not np.isnan(ma200_e) else "",
             "ma_align":    calc_ma_align(ma20_e, ma200_e),
             "range":       round(rng, 4) if rng is not None else "N/A",
             "state":       calc_state(rng),
