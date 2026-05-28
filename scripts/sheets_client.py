@@ -45,12 +45,10 @@ def get_sheet(tab_name: str):
 
 TOP_GAINERS_HEADERS = [
     "DATE", "DAY OF WEEK", "STOCK", "FLOAT", "TOD",
-    "TIME IN", "Column1", "Column2",
-    "TIME OUT", "RUN TIME", "ENTRY TYPE", "AVG BANDS",
+    "TIME IN", "TIME OUT", "RUN TIME", "ENTRY TYPE", "AVG BANDS",
     "# LEGS", "A+ OPP?", "# OF RUNS ON CAL DAY", "TYPE OF STATE",
     "RANGE", "POSITION", "ENTRY PRICE", "EXIT PRICE", "HIGH PRICE INTRA",
     "20 MA", "200 MA", "GAIN $/SHARE", "GAIN %/SHARE",
-    "ON ORACLE?", "DID I TRADE STOCK?",
     "NEWS", "NEWS TYPE", "NOTES",
 ]
 
