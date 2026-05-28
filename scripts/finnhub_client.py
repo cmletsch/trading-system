@@ -293,7 +293,8 @@ def get_candles_polygon(ticker: str, target_date: date) -> pd.DataFrame:
         df = pd.DataFrame(rows).set_index("timestamp").sort_index()
         return df
 
-    except Exception:
+    except Exception as e:
+        print(f" [POLY_ERR:{str(e)[:80]}]", end="")
         return pd.DataFrame()
 
 
