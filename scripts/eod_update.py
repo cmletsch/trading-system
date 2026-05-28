@@ -16,8 +16,22 @@ Flow:
 import os
 import sys
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import pandas as pd
+import pytz
+
+def get_trading_date() -> date:
+    """Get the most recent completed trading day regardless of when script runs."""
+    et  = pytz.timezone("America/New_York")
+    now = datetime.now(et)
+    d   = now.date()
+    # Before 4pm ET means today's market hasn't closed — use yesterday
+    if now.hour < 16:
+        d -= timedelta(days=1)
+    # Skip weekends back to Friday
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -38,7 +52,7 @@ from generate_data_files import (
 
 
 def build_top_gainers_rows(runs: list[dict], news_map: dict) -> list[dict]:
-    today = date.today()
+    today = get_trading_date()
     rows = []
     for run in runs:
         ticker = run.get("ticker", "")
@@ -99,7 +113,9 @@ def main():
     analysis_tickers = collect_gainers_only()[:20]
     print(f"  Running candle analysis on {len(analysis_tickers)} active tickers "
           f"(MDR watchlist scored separately)")
-    today_runs = run_batch_analysis(analysis_tickers)
+    trading_date = get_trading_date()
+    print(f"  Target trading date: {trading_date}")
+    today_runs = run_batch_analysis(analysis_tickers, target_date=trading_date)
     if not today_runs:
         print("\n  No qualifying runs found today")
 
