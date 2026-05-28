@@ -163,3 +163,8 @@ def collect_all_tickers() -> list[str]:
     if unique:
         print(f"  {', '.join(unique[:20])}{'...' if len(unique) > 20 else ''}")
     return unique
+
+
+def collect_gainers_only() -> list[str]:
+    """Return just the Alpha Vantage top gainer tickers for candle analysis."""
+    return [t["ticker"] for t in fetch_top_gainers()]
