@@ -248,6 +248,36 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
                 if v not in ("", None): return str(v)
             return ""
 
+        # Validate entry_type — must be a real pattern, not Y/N/blank
+        VALID_ENTRY_TYPES = {"FGE", "BLAST", "FGE+BLAST", "FGE/BLAST", "BREAKOUT", "BO"}
+        raw_et = safe_get(latest, "ENTRY TYPE")
+        entry_type = raw_et if raw_et.upper() in VALID_ENTRY_TYPES else ""
+        # If latest is bad, try mode of all rows
+        if not entry_type and "ENTRY TYPE" in cols:
+            mode_et = subset["ENTRY TYPE"].astype(str).str.strip()
+            mode_et = mode_et[mode_et.str.upper().isin(VALID_ENTRY_TYPES)]
+            if not mode_et.empty:
+                entry_type = mode_et.mode().iloc[0]
+
+        # Validate # LEGS — must be numeric
+        raw_legs = safe_get(latest, "# LEGS", "LEGS")
+        try:
+            legs_val = str(int(float(raw_legs))) if raw_legs else ""
+        except (ValueError, TypeError):
+            legs_val = ""
+
+        # Validate RANGE — must be numeric
+        raw_range = safe_get(latest, "RANGE")
+        try:
+            range_val = str(round(float(raw_range), 4)) if raw_range else ""
+        except (ValueError, TypeError):
+            range_val = ""
+
+        # Validate STATE — must be a real state
+        VALID_STATES = {"NARROW", "EXTENDED", "BREAKOUT", "BULL", "BEAR", "CONSOLIDATING", "SQUEEZE"}
+        raw_state = safe_get(latest, "TYPE OF STATE", "STATE")
+        state_val = raw_state if raw_state.upper() in VALID_STATES else ""
+
         return {
             "days_count":   len(subset),
             "escalating":   escalating,
@@ -255,14 +285,14 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
             "latest_date":  safe_get(latest, "DATE"),
             "latest_entry": safe_get(latest, "ENTRY PRICE", "ENTRY"),
             "latest_exit":  safe_get(latest, "EXIT PRICE", "EXIT"),
-            "latest_legs":  safe_get(latest, "# LEGS", "LEGS"),
-            "latest_state": safe_get(latest, "TYPE OF STATE", "STATE"),
-            "latest_range": safe_get(latest, "RANGE"),
+            "latest_legs":  legs_val,
+            "latest_state": state_val,
+            "latest_range": range_val,
             "latest_pos":   safe_get(latest, "POSITION"),
             "latest_ma20":  safe_get(latest, "20 MA", "MA20"),
             "latest_ma200": safe_get(latest, "200 MA", "MA200"),
             "float":        safe_get(latest, "FLOAT"),
-            "entry_type":   safe_get(latest, "ENTRY TYPE"),
+            "entry_type":   entry_type,
         }
     except Exception as e:
         print(f"    Warning: could not build qual data for {ticker}: {e}")
@@ -378,8 +408,9 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
         live = live_cache.get(ticker, {"price": 0, "prev": 0, "open": 0,
                                         "day_chg": 0, "gap_pct": 0, "rvol": 0})
 
-        # Exclusion: price below $0.50 (we check current price)
-        if live["price"] > 0 and live["price"] < MDR_EXCLUDE_PRICE:
+        # Exclusion: price below $0.50 — but NEVER remove if stock ran today
+        ran_today = ticker in {r.get("ticker","").upper() for r in (today_runs or [])}
+        if not ran_today and live["price"] > 0 and live["price"] < MDR_EXCLUDE_PRICE:
             rows_to_remove.add(ticker)
             print(f" REMOVED (price ${live['price']} < ${MDR_EXCLUDE_PRICE})")
             continue
