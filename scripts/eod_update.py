@@ -82,7 +82,7 @@ def build_top_gainers_rows(runs: list[dict], news_map: dict) -> list[dict]:
             "20 MA":                 run.get("ma20",  ""),
             "200 MA":                run.get("ma200", ""),
             "GAIN $/SHARE":          gain_d,
-            "GAIN %/SHARE":          run.get("pct_gain", ""),
+            "GAIN %/SHARE":          round(run.get("pct_gain", 0) / 100, 6) if run.get("pct_gain") else "",
             "NEWS":                  news.get("news",      ""),
             "NEWS TYPE":             news.get("news_type", ""),
             "NOTES":                 "",
@@ -106,13 +106,16 @@ def main():
         )
         return
 
-    # ── STEP 2: Run 2-min analysis on today's top gainers ──────────────────────
-    # Alpha Vantage already called in STEP 1 — reuse those gainers for candles
-    # Limit to 20 to stay within AV 25 calls/day budget (1 used for top gainers)
-    from ticker_collector import collect_gainers_only
-    analysis_tickers = collect_gainers_only()[:20]
-    print(f"  Running candle analysis on {len(analysis_tickers)} active tickers "
-          f"(MDR watchlist scored separately)")
+    # ── STEP 2: Run 2-min analysis on AV gainers + SCAN LOG tickers ────────────
+    # Polygon Starter = unlimited calls, so analyze everything from both sources
+    from ticker_collector import collect_gainers_only, fetch_scan_log, fetch_csv_drop
+    av_tickers   = collect_gainers_only()
+    scan_tickers = [t["ticker"] for t in fetch_scan_log()]
+    csv_tickers  = [t["ticker"] for t in fetch_csv_drop()]
+    # Scan log first (your hand-picked stocks), then AV gainers, deduped
+    analysis_tickers = list(dict.fromkeys(scan_tickers + csv_tickers + av_tickers))
+    print(f"  Running candle analysis on {len(analysis_tickers)} tickers "
+          f"({len(scan_tickers)} scan log + {len(av_tickers)} AV gainers)")
     trading_date = get_trading_date()
     print(f"  Target trading date: {trading_date}")
     today_runs = run_batch_analysis(analysis_tickers, target_date=trading_date)
