@@ -312,3 +312,37 @@ def fetch_candles_polygon_2min(ticker: str, target_date: date) -> pd.DataFrame:
     df_2["MA20"]  = df_2["Close"].rolling(20).mean()
     df_2["MA200"] = df_2["Close"].rolling(200).mean()
     return df_2
+
+
+# ── FLOAT LOOKUP ──────────────────────────────────────────────────────────────
+
+def fetch_float(ticker: str) -> str:
+    """Fetch share float (in millions) from Finnhub profile endpoint."""
+    if not FINNHUB_KEY:
+        return ""
+    try:
+        resp = requests.get(
+            f"{BASE_URL}/stock/profile2",
+            params={"symbol": ticker.upper(), "token": FINNHUB_KEY},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return ""
+        data = resp.json()
+        # shareOutstanding is in millions
+        shares = data.get("shareOutstanding")
+        if shares and float(shares) > 0:
+            return str(round(float(shares), 2))
+        return ""
+    except Exception:
+        return ""
+
+
+def fetch_floats_batch(tickers: list[str], delay: float = 0.25) -> dict[str, str]:
+    """Fetch float for multiple tickers. Returns {ticker: float_str}."""
+    import time
+    result = {}
+    for ticker in tickers:
+        result[ticker] = fetch_float(ticker)
+        time.sleep(delay)
+    return result
