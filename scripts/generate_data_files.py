@@ -43,7 +43,10 @@ def build_gainers_json(top_gainers_df: pd.DataFrame, today_runs: list[dict]) -> 
             gp_raw_clean = str(gp_raw).replace("%","").strip()
             try:
                 gp_num = float(gp_raw_clean)
-                if gp_num != 0 and abs(gp_num) < 2:
+                # Historical data: stored as decimal (0.67 = 67%)
+                # Automated data: stored as percentage (47.87 = 47.87%)
+                # Heuristic: if < 10, assume decimal and multiply by 100
+                if gp_num != 0 and abs(gp_num) < 10:
                     gp_num = round(gp_num * 100, 2)
                 gainPct = str(round(gp_num, 2)) + "%"
             except Exception:
