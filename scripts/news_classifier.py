@@ -13,38 +13,12 @@ FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY", "")
 
 
 def fetch_news(ticker: str) -> list[dict]:
-    """Fetch recent news headlines via Finnhub company-news endpoint."""
+    """Fetch recent news headlines via FMP."""
     if not FINNHUB_KEY:
         return []
     try:
-        today = date.today()
-        from_date = (today - timedelta(days=7)).isoformat()
-        to_date = today.isoformat()
-        resp = requests.get(
-            "https://finnhub.io/api/v1/company-news",
-            params={
-                "symbol": ticker.upper(),
-                "from":   from_date,
-                "to":     to_date,
-                "token":  FINNHUB_KEY,
-            },
-            timeout=10,
-        )
-        if not resp.ok:
-            return []
-        items = resp.json()
-        if not items or not isinstance(items, list):
-            return []
-        results = []
-        for item in items[:5]:
-            headline = item.get("headline", "") or ""
-            summary  = item.get("summary",  "") or ""
-            results.append({
-                "title":   headline,
-                "summary": summary,
-                "text":    f"{headline} {summary}".lower(),
-            })
-        return results
+        from fmp_client import fetch_news_fmp
+        return fetch_news_fmp(ticker)
     except Exception:
         return []
 
