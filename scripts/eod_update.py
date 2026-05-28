@@ -92,16 +92,11 @@ def main():
         )
         return
 
-    # ── STEP 2: Run 2-min analysis (top gainers only — not full MDR watchlist) ──
-    # Only run candles on Alpha Vantage top gainers to stay within rate limits.
-    # MDR watchlist stocks get live price scoring only (no candles needed).
-    from ticker_collector import fetch_top_gainers
-    gainers_only = [t["ticker"] for t in fetch_top_gainers()]
-    # Also include any tickers from scan log / csv drop
-    from ticker_collector import fetch_scan_log, fetch_csv_drop
-    scan_tickers  = [t["ticker"] for t in fetch_scan_log()]
-    csv_tickers   = [t["ticker"] for t in fetch_csv_drop()]
-    analysis_tickers = list(dict.fromkeys(gainers_only + scan_tickers + csv_tickers))
+    # ── STEP 2: Run 2-min analysis on today's top gainers ──────────────────────
+    # Alpha Vantage already called in STEP 1 — reuse those gainers for candles
+    # Limit to 20 to stay within AV 25 calls/day budget (1 used for top gainers)
+    from ticker_collector import collect_gainers_only
+    analysis_tickers = collect_gainers_only()[:20]
     print(f"  Running candle analysis on {len(analysis_tickers)} active tickers "
           f"(MDR watchlist scored separately)")
     today_runs = run_batch_analysis(analysis_tickers)
