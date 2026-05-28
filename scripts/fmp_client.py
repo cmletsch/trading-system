@@ -19,6 +19,7 @@ FMP_DELAY = 0.21  # ~300 calls/min = 0.2s between calls
 def _get(endpoint: str, params: dict = None) -> dict | list:
     """Raw GET with error handling."""
     if not FMP_KEY:
+        print(f"  [FMP] No API key set")
         return {}
     p = {"apikey": FMP_KEY}
     if params:
@@ -26,9 +27,17 @@ def _get(endpoint: str, params: dict = None) -> dict | list:
     try:
         resp = requests.get(f"{BASE_URL}/{endpoint}", params=p, timeout=15)
         if resp.status_code == 200:
-            return resp.json()
-        return {}
-    except Exception:
+            data = resp.json()
+            # Check for FMP error messages
+            if isinstance(data, dict) and ("Error Message" in data or "message" in data):
+                print(f"  [FMP ERROR] {endpoint}: {data.get('Error Message') or data.get('message','')[:80]}")
+                return {}
+            return data
+        else:
+            print(f"  [FMP HTTP {resp.status_code}] {endpoint}: {resp.text[:80]}")
+            return {}
+    except Exception as e:
+        print(f"  [FMP EXCEPTION] {endpoint}: {str(e)[:80]}")
         return {}
 
 
