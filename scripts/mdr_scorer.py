@@ -317,7 +317,7 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
             "latest_pos":   safe_get(latest, "POSITION"),
             "latest_ma20":  safe_get(latest, "20 MA", "MA20"),
             "latest_ma200": safe_get(latest, "200 MA", "MA200"),
-            "float":        safe_get(latest, "FLOAT"),
+            "float":        _valid_float(safe_get(latest, "FLOAT")),
             "entry_type":   entry_type,
             "best_gain_p":  best_gain_p,
             "best_gain_d":  best_gain_d,
