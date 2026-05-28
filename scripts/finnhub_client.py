@@ -1,62 +1,61 @@
 """
-finnhub_client.py — Candle data via yfinance (free, Yahoo Finance)
-Used for nightly EOD candle analysis in GitHub Actions.
-If yfinance is blocked, swap fetch_candles_polygon_2min to use FMP Premium.
+finnhub_client.py — Polygon.io candle client
+1-min intraday data for OTC/penny stocks via Polygon Starter ($29/mo)
+All other data (gainers, quotes, news, float) handled by fmp_client.py or Polygon REST
 """
-import time
+import os
+import requests
 import pandas as pd
 import pytz
 from datetime import date
 
-ET       = pytz.timezone("America/New_York")
-POLY_DELAY = 1.0   # 1 second between calls — gentle on Yahoo
+POLYGON_KEY = os.environ.get("POLYGON_API_KEY", "")
+POLY_DELAY  = 12.5
+ET          = pytz.timezone("America/New_York")
 
 
 def fetch_candles_polygon_2min(ticker: str, target_date: date) -> pd.DataFrame:
-    """
-    Fetch 1-min candles via yfinance, resample to 2-min, add MAs.
-    Named 'polygon_2min' so run_analysis.py needs no changes.
-    """
+    """Fetch 1-min bars from Polygon, resample to 2-min, add MAs."""
+    if not POLYGON_KEY:
+        print(" [NO POLYGON KEY]", end="")
+        return pd.DataFrame()
     try:
-        import yfinance as yf
+        date_str = target_date.isoformat()
+        url = (f"https://api.polygon.io/v2/aggs/ticker/{ticker.upper()}"
+               f"/range/1/minute/{date_str}/{date_str}")
+        resp = requests.get(url, params={
+            "adjusted": "true", "sort": "asc",
+            "limit": 50000, "apiKey": POLYGON_KEY,
+        }, timeout=15)
 
-        date_str = target_date.strftime("%Y-%m-%d")
-
-        # yfinance 1-min data: available for last 7 days only
-        tk   = yf.Ticker(ticker)
-        df_1 = tk.history(
-            start=date_str,
-            end=date_str,
-            interval="1m",
-            prepost=True,       # include pre/post market
-            auto_adjust=True,
-        )
-
-        if df_1 is None or df_1.empty:
+        if resp.status_code != 200:
+            return pd.DataFrame()
+        data = resp.json()
+        if data.get("status") not in ("OK", "DELAYED") or not data.get("results"):
             return pd.DataFrame()
 
-        # Normalise columns
-        df_1 = df_1.rename(columns={
-            "Open": "Open", "High": "High", "Low": "Low",
-            "Close": "Close", "Volume": "Volume"
-        })[["Open", "High", "Low", "Close", "Volume"]]
+        rows = []
+        for bar in data["results"]:
+            try:
+                ts = pd.Timestamp(bar["t"], unit="ms").tz_localize("UTC").tz_convert(ET)
+                rows.append({
+                    "timestamp": ts,
+                    "Open":   float(bar["o"]),
+                    "High":   float(bar["h"]),
+                    "Low":    float(bar["l"]),
+                    "Close":  float(bar["c"]),
+                    "Volume": float(bar.get("v", 0)),
+                })
+            except Exception:
+                continue
 
-        # Ensure ET timezone
-        if df_1.index.tzinfo is None:
-            df_1.index = df_1.index.tz_localize("UTC").tz_convert(ET)
-        else:
-            df_1.index = df_1.index.tz_convert(ET)
-
-        # Filter to target date only
-        df_1 = df_1[df_1.index.date == target_date]
-        if df_1.empty:
+        if not rows:
             return pd.DataFrame()
 
-        # Resample to 2-min
-        df_2 = df_1.resample("2min").agg({
+        df_1 = pd.DataFrame(rows).set_index("timestamp").sort_index()
+        df_2  = df_1.resample("2min").agg({
             "Open": "first", "High": "max",
-            "Low":  "min",   "Close": "last",
-            "Volume": "sum",
+            "Low":  "min",   "Close": "last", "Volume": "sum",
         }).dropna(subset=["Open"])
 
         if len(df_2) < 5:
@@ -67,5 +66,5 @@ def fetch_candles_polygon_2min(ticker: str, target_date: date) -> pd.DataFrame:
         return df_2
 
     except Exception as e:
-        print(f" [YF_ERR:{str(e)[:50]}]", end="")
+        print(f" [POLY_ERR:{str(e)[:50]}]", end="")
         return pd.DataFrame()
