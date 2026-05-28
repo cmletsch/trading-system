@@ -1,21 +1,13 @@
 """
-News fetcher and classifier.
-Fetches recent headlines for a ticker via yfinance and classifies
-into one of 7 categories using keyword matching.
+news_classifier.py — News fetching and classification via FMP.
+7 categories: CATALYST, OFFERING/DILUTION, PARTNERSHIP, EARNINGS,
+              SEC/LEGAL, ANALYST, GENERAL
 """
-
-import os
-import requests
-from datetime import date, timedelta
 from config import NEWS_KEYWORDS, NEWS_SCORES
-
-FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY", "")
 
 
 def fetch_news(ticker: str) -> list[dict]:
     """Fetch recent news headlines via FMP."""
-    if not FINNHUB_KEY:
-        return []
     try:
         from fmp_client import fetch_news_fmp
         return fetch_news_fmp(ticker)
@@ -25,44 +17,31 @@ def fetch_news(ticker: str) -> list[dict]:
 
 def classify_news(headlines: list[dict]) -> tuple[str, str]:
     """
-    Classify news into one of 7 categories.
-    Returns (category, top_headline).
-    Category is the highest-scoring match, or '' if no match.
+    Classify a list of headlines into a news category.
+    Returns (headline_str, category_str).
     """
     if not headlines:
         return "", ""
 
-    # Score each category against all headlines
-    cat_scores = {cat: 0 for cat in NEWS_KEYWORDS}
-    for item in headlines:
-        text = item["text"]
-        for cat, keywords in NEWS_KEYWORDS.items():
-            for kw in keywords:
-                if kw in text:
-                    cat_scores[cat] += 1
+    combined = " ".join(h.get("text", "") for h in headlines).lower()
+    best_cat   = ""
+    best_score = 0
 
-    # Pick the category with most keyword hits
-    best_cat = max(cat_scores, key=cat_scores.get)
-    if cat_scores[best_cat] == 0:
-        return "", headlines[0]["title"] if headlines else ""
+    for cat, keywords in NEWS_KEYWORDS.items():
+        score = sum(1 for kw in keywords if kw.lower() in combined)
+        if score > best_score:
+            best_score = score
+            best_cat   = cat
 
-    top_headline = headlines[0]["title"] if headlines else ""
-    return best_cat, top_headline
-
-
-def get_news_score(category: str) -> int:
-    """Return the MDR score for a given news category."""
-    return NEWS_SCORES.get(category, 0)
+    top_headline = headlines[0].get("title", "") if headlines else ""
+    return top_headline, best_cat
 
 
 def analyze_ticker_news(ticker: str) -> dict:
-    """
-    Full pipeline: fetch + classify news for a ticker.
-    Returns dict with category, headline, and MDR score.
-    """
+    """Fetch and classify news for a ticker. Returns dict with news/news_type/news_score."""
     headlines = fetch_news(ticker)
-    category, headline = classify_news(headlines)
-    score = get_news_score(category)
+    headline, category = classify_news(headlines)
+    score = NEWS_SCORES.get(category, 0)
     return {
         "news":       headline,
         "news_type":  category,
