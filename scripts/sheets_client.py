@@ -123,7 +123,6 @@ MDR_HEADERS = [
     "STATE", "RANGE", "POSITION",
     "GAIN $/SHARE", "GAIN %/SHARE",
     "MDR SCORE",
-    "DID IT RUN?",
     "TIER", "DAYS ON LIST", "LAST RUN DATE",
     "NEWS TYPE", "NOTES",
 ]
@@ -258,17 +257,45 @@ def log_tickers(tickers: list[dict], source: str):
 
 
 def read_today_scan_log() -> list[str]:
-    """Return unique tickers logged today."""
+    """Return unique tickers logged today. Handles missing headers and date formats."""
     from config import SHEET_SCAN_LOG
     ws = get_sheet(SHEET_SCAN_LOG)
-    data = ws.get_all_records()
+
+    # Auto-create headers if sheet is empty
+    all_vals = ws.get_all_values()
+    if not all_vals or not any(all_vals[0]):
+        ws.update([["DATE", "TICKER", "SOURCE", "TIMESTAMP", "GAIN_PCT", "PRICE"]])
+        return []
+
+    # Read records
+    try:
+        data = ws.get_all_records()
+    except Exception:
+        return []
     if not data:
         return []
-    today = date.today().isoformat()
-    tickers = list({
-        r["TICKER"] for r in data
-        if r.get("DATE") == today and r.get("TICKER")
-    })
+
+    # Match against both today AND the most recent trading day
+    # so tickers added yesterday still get picked up on midnight runs
+    import pytz
+    from datetime import timedelta
+    _et  = pytz.timezone("America/New_York")
+    _now = __import__("datetime").datetime.now(_et)
+    _d   = _now.date()
+    if _now.hour < 16:
+        _d -= timedelta(days=1)
+    while _d.weekday() >= 5:
+        _d -= timedelta(days=1)
+    valid_dates = {date.today().isoformat(), _d.isoformat()}
+
+    tickers = []
+    seen = set()
+    for r in data:
+        raw_date = str(r.get("DATE", "") or "").strip()[:10]
+        ticker   = str(r.get("TICKER", "") or "").strip().upper()
+        if raw_date in valid_dates and ticker and ticker not in seen:
+            tickers.append(ticker)
+            seen.add(ticker)
     return tickers
 
 
