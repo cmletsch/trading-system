@@ -1,6 +1,6 @@
 """
 Calibrated 2-minute chart FGE/Blast run analysis.
-Uses FMP for candle data (1-min resampled to 2-min).
+Uses FMP stable API for 1-min candle data (resampled to 2-min).
 Parameters tuned against 5/22/2026 template (84% match).
 """
 
@@ -22,7 +22,7 @@ from config import (
     PENNY_THRESHOLD, NARROW_MAX, MEDIUM_MAX,
     CONSOL_BARS, CONSOL_FACTOR,
 )
-from fmp_client import fetch_candles_fmp_2min, FMP_DELAY
+from fmp_client import fetch_candles_polygon_2min, POLY_DELAY
 
 
 # ── SESSION HELPERS ───────────────────────────────────────────────────────────
@@ -242,13 +242,13 @@ def run_batch_analysis(tickers: list[str], target_date: date = None) -> list[dic
 
     print(f"\n[STEP 2] Running 2-min analysis on {len(tickers)} tickers "
           f"for {target_date} via FMP...")
-    print(f"  (Rate limit: 5 calls/min → ~{len(tickers) * FMP_DELAY / 60:.0f} min total)")
+    print(f"  (Rate limit: 5 calls/min → ~{len(tickers) * POLY_DELAY / 60:.0f} min total)")
 
     all_runs = []
     for idx, ticker in enumerate(tickers, 1):
         print(f"  [{idx:03d}/{len(tickers)}] {ticker:<8}", end="", flush=True)
         try:
-            df = fetch_candles_fmp_2min(ticker, target_date)
+            df = fetch_candles_polygon_2min(ticker, target_date)
             if df.empty:
                 print(f"  — no data")
             else:
@@ -266,9 +266,9 @@ def run_batch_analysis(tickers: list[str], target_date: date = None) -> list[dic
         except Exception as e:
             print(f"  — error: {str(e)[:60]}")
 
-        # FMP rate limit
+        # Polygon rate limit
         if idx < len(tickers):
-            time.sleep(FMP_DELAY)
+            time.sleep(POLY_DELAY)
 
     qualifying = [r for r in all_runs if r["pct_gain"] >= MIN_RUN_PCT]
     print(f"\n  Analysis complete: {len(qualifying)} qualifying runs across "
