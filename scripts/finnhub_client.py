@@ -68,3 +68,66 @@ def fetch_candles_polygon_2min(ticker: str, target_date: date) -> pd.DataFrame:
     except Exception as e:
         print(f" [POLY_ERR:{str(e)[:50]}]", end="")
         return pd.DataFrame()
+
+
+# ── BATCH QUOTES via Polygon snapshot ────────────────────────────────────────
+
+def batch_fetch_live_data(tickers: list[str]) -> dict:
+    """Batch live quotes via Polygon snapshot endpoint."""
+    if not tickers or not POLYGON_KEY:
+        return {}
+    results = {}
+    import time
+    chunk_size = 100
+    for i in range(0, len(tickers), chunk_size):
+        chunk = tickers[i:i + chunk_size]
+        sym_str = ",".join(chunk)
+        try:
+            resp = requests.get(
+                "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers",
+                params={"tickers": sym_str, "apiKey": POLYGON_KEY},
+                timeout=15
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                for item in data.get("tickers", []):
+                    sym   = str(item.get("ticker", "")).upper()
+                    day   = item.get("day", {})
+                    price = float(item.get("lastTrade", {}).get("p", 0) or
+                                  day.get("c", 0) or 0)
+                    chg   = float(item.get("todaysChangePerc", 0) or 0)
+                    vol   = int(day.get("v", 0) or 0)
+                    if sym and price > 0:
+                        results[sym] = {"price": price, "chg_pct": chg, "volume": vol}
+        except Exception as e:
+            print(f" [POLY_QUOTE_ERR:{str(e)[:40]}]", end="")
+        if i + chunk_size < len(tickers):
+            time.sleep(0.5)
+    return results
+
+
+# ── NEWS via Polygon ──────────────────────────────────────────────────────────
+
+def fetch_news_polygon(ticker: str) -> list[dict]:
+    """Fetch recent news from Polygon."""
+    try:
+        resp = requests.get(
+            f"https://api.polygon.io/v2/reference/news",
+            params={"ticker": ticker.upper(), "limit": 5, "apiKey": POLYGON_KEY},
+            timeout=10
+        )
+        if resp.status_code != 200:
+            return []
+        items = resp.json().get("results", [])
+        results = []
+        for item in items:
+            title   = str(item.get("title", "") or "")
+            summary = str(item.get("description", "") or "")
+            results.append({
+                "title":   title,
+                "summary": summary,
+                "text":    f"{title} {summary}".lower(),
+            })
+        return results
+    except Exception:
+        return []
