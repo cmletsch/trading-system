@@ -108,6 +108,26 @@ def run_cleanup():
         print("  All GAIN %/SHARE values already in decimal format ✓")
 
 
+    # ── Step 2b: Delete all automated rows (May 27+) — wrong columns pre-cleanup
+    print("\nStep 2b: Deleting all automated rows (DATE >= 2026-05-27)...")
+    ws_tg_fresh = get_sheet(SHEET_TOP_GAINERS)
+    all_vals_fresh = ws_tg_fresh.get_all_values()
+    if all_vals_fresh:
+        hdrs = [h.strip() for h in all_vals_fresh[0]]
+        date_col = hdrs.index("DATE") if "DATE" in hdrs else 0
+        bad_auto = []
+        for i, row in enumerate(all_vals_fresh[1:], start=2):
+            if len(row) > date_col:
+                raw_d = str(row[date_col]).strip()[:10]
+                if raw_d >= "2026-05-27":
+                    bad_auto.append(i)
+        if bad_auto:
+            print(f"  Found {len(bad_auto)} automated rows to delete (rows {bad_auto[0]}-{bad_auto[-1]})")
+            ws_tg_fresh.delete_rows(bad_auto[0], bad_auto[-1])
+            print(f"  Deleted automated rows — workflow will re-add with correct columns")
+        else:
+            print("  No automated rows found (already clean)")
+
     # ── Step 3: Delete unwanted columns ──────────────────────────────────────────
     print("\nStep 3: Removing unwanted columns from TOP Gainers Data...")
     COLS_TO_DELETE = ["Column1", "Column2", "ON ORACLE?", "DID I TRADE STOCK?"]
