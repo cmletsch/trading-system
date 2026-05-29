@@ -88,13 +88,22 @@ def run_cleanup():
             continue
 
     if updates:
-        print(f"  Normalizing {fixed_count} rows from percent to decimal...")
-        # Batch update in chunks of 100
-        for chunk_start in range(0, len(updates), 100):
-            chunk = updates[chunk_start:chunk_start + 100]
+        print(f"  Normalizing {fixed_count} rows from percent to decimal (batch update)...")
+        # Use batch_update to avoid rate limits — single API call per chunk
+        import time
+        chunk_size = 500
+        for chunk_start in range(0, len(updates), chunk_size):
+            chunk = updates[chunk_start:chunk_start + chunk_size]
+            cell_updates = []
             for row_i, col_i, val in chunk:
-                ws.update_cell(row_i, col_i, val)
-            print(f"  Updated {min(chunk_start + 100, len(updates))}/{len(updates)}")
+                col_letter = chr(ord("A") + col_i - 1)
+                cell_updates.append({
+                    "range":  f"{col_letter}{row_i}",
+                    "values": [[val]],
+                })
+            ws.batch_update(cell_updates, value_input_option="USER_ENTERED")
+            print(f"  Updated {min(chunk_start + chunk_size, len(updates))}/{len(updates)}")
+            time.sleep(2)  # Respect rate limits between chunks
     else:
         print("  All GAIN %/SHARE values already in decimal format ✓")
 
