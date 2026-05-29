@@ -186,6 +186,15 @@ def is_timed_out(days_on_list: int, days_since_last_run: int) -> tuple[bool, boo
 
 # ── QUALIFY CHECK ─────────────────────────────────────────────────────────────
 
+
+def _valid_float(val: str) -> str:
+    """Return numeric float string or empty if invalid (rejects time strings etc.)."""
+    try:
+        v = float(str(val).replace("M", "").strip())
+        return str(round(v, 2)) if v > 0 else ""
+    except (ValueError, TypeError):
+        return ""
+
 def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict | None:
     """
     Check if a ticker qualifies for the MDR watchlist.
