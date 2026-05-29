@@ -44,7 +44,8 @@ from sheets_client      import (
     write_mdr_tracking, export_all_to_excel,
     TOP_GAINERS_HEADERS,
 )
-from fmp_client         import batch_fetch_live_data_fmp, fetch_floats_batch_fmp
+from finnhub_client     import batch_fetch_live_data
+from fmp_client         import fetch_floats_batch_fmp
 from generate_data_files import (
     build_gainers_json, build_mdr_json,
     build_watchlist_payload, update_netlify_watchlist,
