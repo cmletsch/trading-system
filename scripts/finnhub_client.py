@@ -114,8 +114,13 @@ def batch_fetch_live_data(tickers: list) -> dict:
                 params={"tickers": sym_str, "apiKey": POLYGON_KEY},
                 timeout=15
             )
+            if resp.status_code != 200:
+                print(f" [POLY_SNAP_ERR {resp.status_code}:{resp.text[:60]}]", end="")
+                continue
             if resp.status_code == 200:
                 data = resp.json()
+                if i == 0 and not data.get("tickers"):
+                    print(f" [POLY_SNAP_EMPTY: {str(data)[:80]}]", end="")
                 for item in data.get("tickers", []):
                     sym      = str(item.get("ticker", "")).upper()
                     day      = item.get("day", {})
@@ -221,9 +226,13 @@ def fetch_top_gainers_polygon() -> list:
             timeout=15
         )
         if resp.status_code != 200:
+            print(f"  [POLY_GAINERS_ERR {resp.status_code}: {resp.text[:80]}]")
             return []
+        raw = resp.json()
+        if not raw.get("tickers"):
+            print(f"  [POLY_GAINERS_EMPTY: {str(raw)[:80]}]")
         results = []
-        for item in resp.json().get("tickers", []):
+        for item in raw.get("tickers", []):
             sym   = str(item.get("ticker", "")).upper()
             day   = item.get("day", {})
             price = float(item.get("lastTrade", {}).get("p", 0) or day.get("c", 0) or 0)
