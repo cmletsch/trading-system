@@ -468,6 +468,34 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
         except (ValueError, TypeError):
             first_entry = 0.0
 
+        # Backfill any blank fields from TOP Gainers history (runs every night)
+        if qual:
+            def _blank(field):
+                v = row.get(field, "")
+                return v is None or str(v).strip() in ("", "nan", "None", "0", "0.0")
+            if _blank("GAIN %/SHARE") and qual.get("best_gain_p"):
+                df.at[idx, "GAIN %/SHARE"] = qual["best_gain_p"]
+            if _blank("GAIN $/SHARE") and qual.get("best_gain_d"):
+                df.at[idx, "GAIN $/SHARE"] = qual["best_gain_d"]
+            if _blank("ENTRY PRICE") and qual.get("latest_entry"):
+                df.at[idx, "ENTRY PRICE"]  = qual["latest_entry"]
+            if _blank("EXIT PRICE") and qual.get("latest_exit"):
+                df.at[idx, "EXIT PRICE"]   = qual["latest_exit"]
+            if _blank("ENTRY TIME") and qual.get("best_ti"):
+                df.at[idx, "ENTRY TIME"]   = qual["best_ti"]
+            if _blank("EXIT TIME") and qual.get("best_to"):
+                df.at[idx, "EXIT TIME"]    = qual["best_to"]
+            if _blank("TRADE TIME") and qual.get("best_rt"):
+                df.at[idx, "TRADE TIME"]   = qual["best_rt"]
+            if _blank("20 MA") and qual.get("latest_ma20"):
+                df.at[idx, "20 MA"]        = qual["latest_ma20"]
+            if _blank("200 MA") and qual.get("latest_ma200"):
+                df.at[idx, "200 MA"]       = qual["latest_ma200"]
+            if _blank("FLOAT") and qual.get("float"):
+                df.at[idx, "FLOAT"]        = qual["float"]
+            if _blank("ENTRY TYPE") and qual.get("entry_type"):
+                df.at[idx, "ENTRY TYPE"]   = qual["entry_type"]
+
         # News
         news_cat = news_map.get(ticker, {}).get("news_type", "")
 
