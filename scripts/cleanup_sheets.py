@@ -37,15 +37,18 @@ def run_cleanup():
 
     print(f"ENTRY TYPE col: {et_col}, GAIN %/SHARE col: {gain_col}")
 
-    # ── Step 1: Identify bad rows (ENTRY TYPE = Y or N) ──────────────────────
-    bad_row_indices = []  # 1-based sheet row indices (header = row 1)
-    for i, row in enumerate(all_values[1:], start=2):  # row 2 = first data row
+    # ── Step 1: Identify bad rows ────────────────────────────────────────────
+    # Bad rows = ENTRY TYPE is Y/N (old column-mapping bug) OR numeric (tonight's shift bug)
+    import re as _re
+    bad_row_indices = []
+    for i, row in enumerate(all_values[1:], start=2):
         if et_col >= 0 and len(row) > et_col:
             et = str(row[et_col]).strip().upper()
-            if et in ('Y', 'N'):
+            # Y/N from old bug, or numeric from tonight's column-shift bug
+            if et in ('Y', 'N') or _re.match(r'^\d+\.?\d*$', et):
                 bad_row_indices.append(i)
 
-    print(f"\nStep 1: Found {len(bad_row_indices)} bad rows (ENTRY TYPE=Y/N)")
+    print(f"\nStep 1: Found {len(bad_row_indices)} bad rows (Y/N or numeric ENTRY TYPE)")
     if bad_row_indices:
         print(f"  Rows: {bad_row_indices[0]} to {bad_row_indices[-1]}")
         
