@@ -463,7 +463,10 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
         # Escalating exits from top gainers history
         qual = qualifies_for_watchlist(ticker, top_gainers_df)
         escalating   = qual["escalating"]   if qual else False
-        first_entry  = qual["first_entry"]  if qual else 0
+        try:
+            first_entry = float(qual["first_entry"]) if qual and qual.get("first_entry") else 0.0
+        except (ValueError, TypeError):
+            first_entry = 0.0
 
         # News
         news_cat = news_map.get(ticker, {}).get("news_type", "")
