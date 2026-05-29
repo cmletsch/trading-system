@@ -9,8 +9,8 @@ from config import NEWS_KEYWORDS, NEWS_SCORES
 def fetch_news(ticker: str) -> list[dict]:
     """Fetch recent news headlines via FMP."""
     try:
-        from fmp_client import fetch_news_fmp
-        return fetch_news_fmp(ticker)
+        from finnhub_client import fetch_news_polygon
+        return fetch_news_polygon(ticker)
     except Exception:
         return []
 
