@@ -45,7 +45,7 @@ from sheets_client      import (
     TOP_GAINERS_HEADERS,
 )
 from finnhub_client     import batch_fetch_live_data
-from fmp_client         import fetch_floats_batch_fmp
+from finnhub_client     import fetch_floats_batch
 from generate_data_files import (
     build_gainers_json, build_mdr_json,
     build_watchlist_payload, update_netlify_watchlist,
@@ -123,6 +123,15 @@ def main():
     today_runs = run_batch_analysis(analysis_tickers, target_date=trading_date)
     if not today_runs:
         print("\n  No qualifying runs found today")
+
+    # ── STEP 2b: Fetch floats for qualifying tickers ─────────────────────────
+    if today_runs:
+        qualifying_tickers = list({r["ticker"] for r in today_runs})
+        print(f"  Fetching floats for {len(qualifying_tickers)} tickers...")
+        float_map = fetch_floats_batch(qualifying_tickers)
+        # Add float to each run
+        for run in today_runs:
+            run["float"] = float_map.get(run["ticker"], "")
 
     # ── STEP 3: Fetch news ────────────────────────────────────────────────────
     print("\n[STEP 3] Fetching news...")
