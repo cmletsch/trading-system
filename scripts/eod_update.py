@@ -155,7 +155,7 @@ def main():
     # ── STEP 6: Write data files for dashboard ────────────────────────────────
     print("\n[STEP 6] Writing data files...")
     gainers_data = build_gainers_json(top_gainers_df, today_runs)
-    mdr_data     = build_mdr_json(updated_mdr_df)
+    mdr_data     = build_mdr_json(updated_mdr_df, top_gainers_df=read_top_gainers(days_back=90))
     write_data_files(gainers_data, mdr_data)
 
     # ── STEP 7: Update watchlist via Netlify function ─────────────────────────
