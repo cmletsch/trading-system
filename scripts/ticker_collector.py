@@ -24,12 +24,12 @@ from config import (
 
 def fetch_top_gainers() -> list[dict]:
     """Pull today's top gainers from FMP."""
-    print("  [Source 1] Fetching top gainers via FMP...")
+    print("  [Source 1] Fetching top gainers via Polygon...")
     try:
-        from fmp_client import fetch_top_gainers_fmp
-        return fetch_top_gainers_fmp()
+        from finnhub_client import fetch_top_gainers_polygon
+        return fetch_top_gainers_polygon()
     except Exception as e:
-        print(f"    FMP error: {e}")
+        print(f"    Polygon gainers error: {e}")
         return []
 
 
