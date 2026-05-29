@@ -147,37 +147,109 @@ def build_gainers_json(top_gainers_df: pd.DataFrame, today_runs: list[dict]) -> 
 
 # ── MDR.JSON ──────────────────────────────────────────────────────────────────
 
-def build_mdr_json(mdr_df: pd.DataFrame) -> dict:
-    """Build mdr.json in the format dashboard.html expects."""
+def build_mdr_json(mdr_df: pd.DataFrame, top_gainers_df: pd.DataFrame = None) -> dict:
+    """
+    Build mdr.json with full watchlist card data including daily history,
+    dates array, and escalating flag — sourced from TOP Gainers history.
+    """
     records = []
+
+    # Build lookup from TOP Gainers for daily data
+    tg_by_stock = {}
+    if top_gainers_df is not None and not top_gainers_df.empty:
+        for _, tg_row in top_gainers_df.iterrows():
+            sym = str(tg_row.get("STOCK", "") or "").strip().upper()
+            if not sym:
+                continue
+            try:
+                d = pd.to_datetime(tg_row.get("DATE"), errors="coerce")
+                if pd.isna(d):
+                    continue
+                ep_raw = tg_row.get("ENTRY PRICE", "") or ""
+                xp_raw = tg_row.get("EXIT PRICE",  "") or ""
+                gp_raw = tg_row.get("GAIN %/SHARE", "") or ""
+                try:
+                    ep = float(str(ep_raw)) if ep_raw else None
+                    xp = float(str(xp_raw)) if xp_raw else None
+                    gp = float(str(gp_raw)) if gp_raw else None
+                    # Normalise gain: if >= 2 it's stored as percent, convert to decimal
+                    if gp is not None and abs(gp) >= 2:
+                        gp = gp / 100
+                except (ValueError, TypeError):
+                    ep = xp = gp = None
+
+                if sym not in tg_by_stock:
+                    tg_by_stock[sym] = []
+                tg_by_stock[sym].append({
+                    "date": d.strftime("%Y-%m-%d"),
+                    "ep": round(ep, 4) if ep else None,
+                    "xp": round(xp, 4) if xp else None,
+                    "gp": round(gp, 4) if gp else None,
+                })
+            except Exception:
+                continue
+
     if not mdr_df.empty:
         for _, row in mdr_df.iterrows():
             stock = str(row.get("STOCK", "") or "").strip().upper()
             if not stock:
                 continue
+
+            # Build daily array from TOP Gainers history
+            raw_days = tg_by_stock.get(stock, [])
+            # Group by date, average entry/exit/gain per day
+            by_date = {}
+            for r in raw_days:
+                dt = r["date"]
+                if dt not in by_date:
+                    by_date[dt] = {"entries": [], "exits": [], "gains": []}
+                if r["ep"]: by_date[dt]["entries"].append(r["ep"])
+                if r["xp"]: by_date[dt]["exits"].append(r["xp"])
+                if r["gp"]: by_date[dt]["gains"].append(r["gp"])
+
+            daily = []
+            for dt in sorted(by_date.keys()):
+                d = by_date[dt]
+                avg_ep = round(sum(d["entries"]) / len(d["entries"]), 4) if d["entries"] else None
+                avg_xp = round(sum(d["exits"]) / len(d["exits"]), 4) if d["exits"] else None
+                avg_gp = round(sum(d["gains"]) / len(d["gains"]), 4) if d["gains"] else None
+                daily.append({"date": dt, "ep": avg_ep, "xp": avg_xp, "gp": avg_gp})
+
+            # Escalating: each day's exit > previous day's exit
+            escalating = False
+            if len(daily) >= 2:
+                exits = [d["xp"] for d in daily if d["xp"]]
+                if len(exits) >= 2:
+                    escalating = all(exits[i] > exits[i-1] for i in range(1, len(exits)))
+
+            # Dates array from actual trading days
+            dates = sorted(set(d["date"] for d in daily)) if daily else []
+
             records.append({
-                "stock":    stock,
-                "float":    str(row.get("FLOAT", "") or ""),
-                "listDate": str(row.get("MDR LIST DATE",   "") or "")[:10],
-                "boDate":   str(row.get("INITIAL BO DATE", "") or "")[:10],
-                "tod":      str(row.get("TOD",        "") or ""),
-                "ti":       str(row.get("ENTRY TIME", "") or ""),
-                "to":       str(row.get("EXIT TIME",  "") or ""),
-                "et":       str(row.get("ENTRY TYPE", "") or ""),
-                "ep":       _num(str(row.get("ENTRY PRICE", "") or "")),
-                "xp":       _num(str(row.get("EXIT PRICE",  "") or "")),
-                "hp":       "",
-                "ma20":     _num(str(row.get("20 MA",  "") or "")),
-                "ma200":    _num(str(row.get("200 MA", "") or "")),
-                "state":    str(row.get("STATE", "") or ""),
-                "range":    _num(str(row.get("RANGE",    "") or "")),
-                "pos":      _num(str(row.get("POSITION", "") or "")),
-                "legs":     _num(str(row.get("# LEGS",   "") or "")),
-                "score":    _num(str(row.get("MDR SCORE", "") or "")),
-                "tier":     str(row.get("TIER", "") or ""),
+                "stock":       stock,
+                "float":       str(row.get("FLOAT", "") or ""),
+                "listDate":    str(row.get("MDR LIST DATE",   "") or "")[:10],
+                "boDate":      str(row.get("INITIAL BO DATE", "") or "")[:10],
+                "tod":         str(row.get("TOD",        "") or ""),
+                "ti":          str(row.get("ENTRY TIME", "") or ""),
+                "to":          str(row.get("EXIT TIME",  "") or ""),
+                "et":          str(row.get("ENTRY TYPE", "") or ""),
+                "ep":          _num(str(row.get("ENTRY PRICE", "") or "")),
+                "xp":          _num(str(row.get("EXIT PRICE",  "") or "")),
+                "ma20":        _num(str(row.get("20 MA",  "") or "")),
+                "ma200":       _num(str(row.get("200 MA", "") or "")),
+                "state":       str(row.get("STATE", "") or ""),
+                "range":       _num(str(row.get("RANGE",    "") or "")),
+                "pos":         _num(str(row.get("POSITION", "") or "")),
+                "legs":        _num(str(row.get("# LEGS",   "") or "")),
+                "score":       _num(str(row.get("MDR SCORE", "") or "")),
+                "tier":        str(row.get("TIER", "") or ""),
                 "days":        _num(str(row.get("DAYS ON LIST", "") or "")),
                 "newsType":    str(row.get("NEWS TYPE", "") or ""),
                 "lastRunDate": str(row.get("LAST RUN DATE", "") or "")[:10],
+                "daily":       daily,
+                "dates":       dates,
+                "escalating":  escalating,
             })
     return {
         "updated": datetime.utcnow().isoformat() + "Z",
