@@ -206,3 +206,39 @@ def fetch_floats_batch(tickers: list) -> dict:
         result[ticker] = fetch_float_polygon(ticker)
         time.sleep(0.3)
     return result
+
+
+# ── TOP GAINERS via Polygon ───────────────────────────────────────────────────
+
+def fetch_top_gainers_polygon() -> list:
+    """Fetch today's top % gainers via Polygon snapshot."""
+    if not POLYGON_KEY:
+        return []
+    try:
+        resp = requests.get(
+            "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers",
+            params={"apiKey": POLYGON_KEY, "include_otc": "true"},
+            timeout=15
+        )
+        if resp.status_code != 200:
+            return []
+        results = []
+        for item in resp.json().get("tickers", []):
+            sym   = str(item.get("ticker", "")).upper()
+            day   = item.get("day", {})
+            price = float(item.get("lastTrade", {}).get("p", 0) or day.get("c", 0) or 0)
+            chg   = float(item.get("todaysChangePerc", 0) or 0)
+            vol   = int(day.get("v", 0) or 0)
+            if sym and price >= 0.50 and chg >= 10:
+                results.append({
+                    "ticker":     sym,
+                    "price":      price,
+                    "change_pct": chg,
+                    "volume":     vol,
+                    "source":     "POLYGON_GAINERS",
+                })
+        print(f"    Found {len(results)} qualifying gainers")
+        return results[:45]
+    except Exception as e:
+        print(f"  [POLY_GAINERS_ERR:{str(e)[:50]}]")
+        return []
