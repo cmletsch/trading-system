@@ -53,21 +53,26 @@ TOP_GAINERS_HEADERS = [
 ]
 
 def read_top_gainers(days_back: int = 90) -> pd.DataFrame:
-    """Read TOP Gainers Data sheet into a DataFrame."""
+    """Read TOP Gainers Data sheet into a DataFrame.
+    Strips leading/trailing spaces from all column names so ' ENTRY PRICE '
+    is normalised to 'ENTRY PRICE' before any lookups.
+    """
     from config import SHEET_TOP_GAINERS
     ws = get_sheet(SHEET_TOP_GAINERS)
-    try:
-        data = ws.get_all_records(expected_headers=TOP_GAINERS_HEADERS)
-    except Exception:
-        # Fallback: read raw values and build DataFrame manually
-        all_values = ws.get_all_values()
-        if not all_values or len(all_values) < 2:
-            return pd.DataFrame(columns=TOP_GAINERS_HEADERS)
-        headers = all_values[0]
-        rows    = all_values[1:]
-        data    = [dict(zip(headers, row)) for row in rows]
+
+    # Always use raw values to avoid expected_headers mismatch on spaced cols
+    all_values = ws.get_all_values()
+    if not all_values or len(all_values) < 2:
+        return pd.DataFrame(columns=TOP_GAINERS_HEADERS)
+
+    # Strip spaces from headers so ' ENTRY PRICE ' → 'ENTRY PRICE'
+    headers = [h.strip() for h in all_values[0]]
+    rows    = all_values[1:]
+    data    = [dict(zip(headers, row)) for row in rows]
+
     if not data:
         return pd.DataFrame(columns=TOP_GAINERS_HEADERS)
+
     df = pd.DataFrame(data)
     if "DATE" in df.columns:
         df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
