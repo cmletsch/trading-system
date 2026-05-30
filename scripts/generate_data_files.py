@@ -168,13 +168,29 @@ def build_mdr_json(mdr_df: pd.DataFrame, top_gainers_df: pd.DataFrame = None) ->
                 ep_raw = tg_row.get("ENTRY PRICE", "") or ""
                 xp_raw = tg_row.get("EXIT PRICE",  "") or ""
                 gp_raw = tg_row.get("GAIN %/SHARE", "") or ""
+
+                def _parse_price(v):
+                    """Parse price — handles floats, strings, dollar signs."""
+                    try:
+                        return float(str(v).replace("$","").replace(",","").strip())
+                    except (ValueError, TypeError):
+                        return None
+
+                def _parse_gain(v):
+                    """Parse gain — handles 0.49 (decimal), 49 (pct), '49%' (str pct)."""
+                    if v is None or v == "":
+                        return None
+                    try:
+                        s = str(v).replace("%","").replace(",","").strip()
+                        g = float(s)
+                        return g / 100 if abs(g) >= 2 else g
+                    except (ValueError, TypeError):
+                        return None
+
                 try:
-                    ep = float(str(ep_raw)) if ep_raw else None
-                    xp = float(str(xp_raw)) if xp_raw else None
-                    gp = float(str(gp_raw)) if gp_raw else None
-                    # Normalise gain: if >= 2 it's stored as percent, convert to decimal
-                    if gp is not None and abs(gp) >= 2:
-                        gp = gp / 100
+                    ep = _parse_price(ep_raw) if ep_raw else None
+                    xp = _parse_price(xp_raw) if xp_raw else None
+                    gp = _parse_gain(gp_raw) if gp_raw else None
                 except (ValueError, TypeError):
                     ep = xp = gp = None
 
