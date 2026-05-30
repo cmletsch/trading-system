@@ -77,20 +77,27 @@ def read_top_gainers(days_back: int = 90) -> pd.DataFrame:
 
 
 def append_top_gainers_rows(rows: list[dict]):
-    """Append new rows to TOP Gainers Data. Skips duplicates (same DATE+STOCK+TIME IN)."""
+    """
+    Append new rows using SHEET HEADER ORDER (not positional).
+    This handles any sheet column structure (26 or 30 cols) correctly.
+    """
     from config import SHEET_TOP_GAINERS
     ws = get_sheet(SHEET_TOP_GAINERS)
-    existing = ws.get_all_records()
 
-    # Build a set of existing keys
+    # Get ACTUAL sheet headers — use these as the write order
+    sheet_headers = [h.strip() for h in ws.row_values(1)]
+
+    # If sheet is empty, write our headers first
+    if not sheet_headers:
+        ws.append_row(TOP_GAINERS_HEADERS)
+        sheet_headers = TOP_GAINERS_HEADERS[:]
+
+    # Build existing keys for dedup
+    existing = ws.get_all_records()
     existing_keys = set()
     for r in existing:
         key = (str(r.get("DATE", "")), str(r.get("STOCK", "")), str(r.get("TIME IN", "")))
         existing_keys.add(key)
-
-    # Ensure header row exists
-    if not existing:
-        ws.append_row(TOP_GAINERS_HEADERS)
 
     new_rows = []
     added = 0
@@ -98,7 +105,8 @@ def append_top_gainers_rows(rows: list[dict]):
         key = (str(row.get("DATE", "")), str(row.get("STOCK", "")), str(row.get("TIME IN", "")))
         if key in existing_keys:
             continue
-        ordered = [row.get(h, "") for h in TOP_GAINERS_HEADERS]
+        # Write in SHEET column order — unknown/extra columns get empty string
+        ordered = [row.get(h, "") for h in sheet_headers]
         new_rows.append(ordered)
         existing_keys.add(key)
         added += 1
@@ -106,7 +114,7 @@ def append_top_gainers_rows(rows: list[dict]):
     if new_rows:
         ws.append_rows(new_rows, value_input_option="USER_ENTERED")
 
-    print(f"  Appended {added} new rows to {SHEET_TOP_GAINERS}")
+    print(f"  Appended {added} new rows to {SHEET_TOP_GAINERS} (sheet cols: {len(sheet_headers)})")
     return added
 
 
