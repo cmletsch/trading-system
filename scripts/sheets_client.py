@@ -105,13 +105,19 @@ def append_top_gainers_rows(rows: list[dict]):
     existing = ws.get_all_records()
     existing_keys = set()
     for r in existing:
-        key = (str(r.get("DATE", "")), str(r.get("STOCK", "")), str(r.get("TIME IN", "")))
+        # Normalize DATE to YYYY-MM-DD string (gspread may return datetime objects)
+        d = r.get("DATE", "")
+        if hasattr(d, 'strftime'):
+            d = d.strftime("%Y-%m-%d")
+        else:
+            d = str(d).strip()[:10]
+        key = (d, str(r.get("STOCK", "")).strip().upper(), str(r.get("TIME IN", "")).strip())
         existing_keys.add(key)
 
     new_rows = []
     added = 0
     for row in rows:
-        key = (str(row.get("DATE", "")), str(row.get("STOCK", "")), str(row.get("TIME IN", "")))
+        key = (str(row.get("DATE", "")).strip()[:10], str(row.get("STOCK", "")).strip().upper(), str(row.get("TIME IN", "")).strip())
         if key in existing_keys:
             continue
         # Write in SHEET column order — unknown/extra columns get empty string
