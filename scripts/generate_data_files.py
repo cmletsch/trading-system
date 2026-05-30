@@ -330,7 +330,7 @@ def build_watchlist_payload(mdr_df: pd.DataFrame,
                and "EXIT PRICE" in top_gainers_df.columns:
                 subset2 = top_gainers_df[
                     top_gainers_df["STOCK"].astype(str).str.upper().str.strip() == sym
-                ].sort_values("DATE", errors="ignore")
+                ].sort_values("DATE")
                 exits2 = pd.to_numeric(
                     subset2.get("EXIT PRICE", pd.Series()), errors="coerce"
                 ).dropna().tolist()
