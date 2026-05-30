@@ -53,25 +53,29 @@ TOP_GAINERS_HEADERS = [
 ]
 
 def read_top_gainers(days_back: int = 90) -> pd.DataFrame:
-    """Read TOP Gainers Data sheet into a DataFrame.
-    Strips leading/trailing spaces from all column names so ' ENTRY PRICE '
-    is normalised to 'ENTRY PRICE' before any lookups.
+    """Read TOP Gainers Data sheet, stripping spaces from column names.
+    Uses get_all_records() so percentage-formatted cells return floats (0.49)
+    not display strings ("49%"). Keys are then stripped of leading/trailing spaces.
     """
     from config import SHEET_TOP_GAINERS
     ws = get_sheet(SHEET_TOP_GAINERS)
 
-    # Always use raw values to avoid expected_headers mismatch on spaced cols
-    all_values = ws.get_all_values()
-    if not all_values or len(all_values) < 2:
-        return pd.DataFrame(columns=TOP_GAINERS_HEADERS)
-
-    # Strip spaces from headers so ' ENTRY PRICE ' → 'ENTRY PRICE'
-    headers = [h.strip() for h in all_values[0]]
-    rows    = all_values[1:]
-    data    = [dict(zip(headers, row)) for row in rows]
+    try:
+        # get_all_records returns proper Python types (floats for numeric/pct cells)
+        data = ws.get_all_records()
+    except Exception:
+        # Fallback to raw values if records call fails
+        all_values = ws.get_all_values()
+        if not all_values or len(all_values) < 2:
+            return pd.DataFrame(columns=TOP_GAINERS_HEADERS)
+        headers = [h.strip() for h in all_values[0]]
+        data = [dict(zip(headers, row)) for row in all_values[1:]]
 
     if not data:
         return pd.DataFrame(columns=TOP_GAINERS_HEADERS)
+
+    # Strip spaces from all column names: ' ENTRY PRICE ' → 'ENTRY PRICE'
+    data = [{k.strip(): v for k, v in row.items()} for row in data]
 
     df = pd.DataFrame(data)
     if "DATE" in df.columns:
