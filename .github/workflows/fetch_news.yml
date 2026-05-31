@@ -1,0 +1,21 @@
+name: Fetch Historical News
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch-news:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install gspread pandas openpyxl pytz requests google-auth --quiet
+      - name: Fetch and write historical news
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          SPREADSHEET_ID:     ${{ secrets.SPREADSHEET_ID }}
+          POLYGON_API_KEY:    ${{ secrets.POLYGON_API_KEY }}
+        run: python scripts/fetch_historical_news.py
