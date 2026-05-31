@@ -306,8 +306,9 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
         # Best run stats (highest gain day)
         best_ti, best_to, best_rt = "", "", ""
         if "GAIN %/SHARE" in cols and not subset.empty:
-            idx_max = pd.to_numeric(subset["GAIN %/SHARE"], errors="coerce").idxmax()
-            if pd.notna(idx_max):
+            _g_series = pd.to_numeric(subset["GAIN %/SHARE"], errors="coerce")
+            idx_max = _g_series.idxmax() if not _g_series.dropna().empty else None
+            if idx_max is not None and pd.notna(idx_max):
                 best_row = subset.loc[idx_max]
                 best_ti = safe_get(best_row, "TIME IN")
                 best_to = safe_get(best_row, "TIME OUT")
