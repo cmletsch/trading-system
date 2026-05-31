@@ -123,8 +123,17 @@ def run_cleanup():
                     bad_auto.append(i)
         if bad_auto:
             print(f"  Found {len(bad_auto)} automated rows to delete (rows {bad_auto[0]}-{bad_auto[-1]})")
-            ws_tg_fresh.delete_rows(bad_auto[0], bad_auto[-1])
-            print(f"  Deleted automated rows — workflow will re-add with correct columns")
+            # Delete in reverse-order batches of 200 to avoid API limits
+            batch_size = 200
+            deleted = 0
+            for i in range(bad_auto[-1], bad_auto[0] - 1, -batch_size):
+                start = max(bad_auto[0], i - batch_size + 1)
+                end   = i
+                ws_tg_fresh.delete_rows(start, end)
+                deleted += end - start + 1
+                print(f"  Deleted rows {start}-{end} ({deleted}/{len(bad_auto)})")
+                import time; time.sleep(1)
+            print(f"  ✓ All {deleted} automated rows deleted")
         else:
             print("  No automated rows found (already clean)")
 
