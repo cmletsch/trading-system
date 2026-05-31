@@ -44,12 +44,12 @@ def get_sheet(tab_name: str):
 # ── TOP GAINERS DATA ──────────────────────────────────────────────────────────
 
 TOP_GAINERS_HEADERS = [
-    "DATE", "DAY OF WEEK", "STOCK", "FLOAT", "TOD",
-    "TIME IN", "TIME OUT", "RUN TIME", "ENTRY TYPE", "AVG BANDS",
-    "# LEGS", "A+ OPP?", "# OF RUNS ON CAL DAY", "TYPE OF STATE",
-    "RANGE", "POSITION", "ENTRY PRICE", "EXIT PRICE",
-    "20 MA", "200 MA", "GAIN $/SHARE", "GAIN %/SHARE",
-    "NEWS Y/N", "NEWS CATEGORY", "NOTES",
+    "DATE", "DOW", "WEEK#", "STOCK", "FLOAT", "TOD",
+    "TIME IN", "TIME OUT", "TRADE TIME", "ENTRY TYPE",
+    "ENTRY PRICE", "EXIT PRICE",
+    "20 MA", "200 MA", "STATE", "RANGE", "POSITION",
+    "GAIN $/SHARE", "G/L %/SHARE", "# LEGS", "A+ OPP?",
+    "MDR WATCHLIST", "NEWS Y/N", "NEWS CATEGORY", "NOTES",
 ]
 
 def read_top_gainers(days_back: int = 90) -> pd.DataFrame:
@@ -76,6 +76,9 @@ def read_top_gainers(days_back: int = 90) -> pd.DataFrame:
 
     # Strip spaces from all column names: ' ENTRY PRICE ' → 'ENTRY PRICE'
     data = [{k.strip(): v for k, v in row.items()} for row in data]
+    # Alias personal Excel column names → internal names used by scorer/generator
+    _ALIAS = {"DOW":"DAY OF WEEK","TRADE TIME":"RUN TIME","STATE":"TYPE OF STATE","G/L %/SHARE":"GAIN %/SHARE"}
+    data = [{_ALIAS.get(k,k): v for k, v in row.items()} for row in data]
 
     df = pd.DataFrame(data)
     if "DATE" in df.columns:
