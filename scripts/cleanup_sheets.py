@@ -108,55 +108,6 @@ def run_cleanup():
         print("  All GAIN %/SHARE values already in decimal format ✓")
 
 
-    # ── Step 2b: Delete all automated rows (May 27+) — wrong columns pre-cleanup
-    print("\nStep 2b: Deleting all automated rows (DATE >= 2026-05-27)...")
-    ws_tg_fresh = get_sheet(SHEET_TOP_GAINERS)
-    all_vals_fresh = ws_tg_fresh.get_all_values()
-    if all_vals_fresh:
-        hdrs = [h.strip() for h in all_vals_fresh[0]]
-        date_col = hdrs.index("DATE") if "DATE" in hdrs else 0
-        from datetime import datetime as _dt
-        cutoff = _dt(2026, 5, 27)
-        bad_auto = []
-        for i, row in enumerate(all_vals_fresh[1:], start=2):
-            if len(row) > date_col:
-                raw_d = str(row[date_col]).strip()
-                # Handle both "2026-05-27" and "5/27/2026" date formats
-                parsed = None
-                for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%-m/%-d/%Y"):
-                    try:
-                        parsed = _dt.strptime(raw_d[:10], fmt); break
-                    except Exception:
-                        pass
-                if parsed and parsed >= cutoff:
-                    bad_auto.append(i)
-        if bad_auto:
-            print(f"  Found {len(bad_auto)} automated rows to delete")
-            import time as _time
-            # Build contiguous groups, delete from bottom to top
-            groups = []
-            grp_start = bad_auto[0]
-            grp_end   = bad_auto[0]
-            for r in bad_auto[1:]:
-                if r == grp_end + 1:
-                    grp_end = r
-                else:
-                    groups.append((grp_start, grp_end))
-                    grp_start = grp_end = r
-            groups.append((grp_start, grp_end))
-            # Delete largest-index groups first to preserve lower row indices
-            groups_rev = sorted(groups, key=lambda g: g[0], reverse=True)
-            deleted = 0
-            for gs, ge in groups_rev:
-                ws_tg_fresh.delete_rows(gs, ge)
-                cnt = ge - gs + 1
-                deleted += cnt
-                print(f"  Deleted rows {gs}-{ge} ({cnt} rows, {deleted} total)")
-                _time.sleep(0.8)
-            print(f"  ✓ Deleted {deleted} automated rows")
-        else:
-            print("  No automated rows found (already clean)")
-
     # ── Step 3: Delete unwanted columns ──────────────────────────────────────────
     print("\nStep 3: Removing unwanted columns from TOP Gainers Data...")
     COLS_TO_DELETE = ["Column1", "Column2", "ON ORACLE?", "DID I TRADE STOCK?"]
