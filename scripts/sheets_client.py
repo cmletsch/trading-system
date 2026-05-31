@@ -79,6 +79,20 @@ def read_top_gainers(days_back: int = 90) -> pd.DataFrame:
     # Alias personal Excel column names → internal names used by scorer/generator
     _ALIAS = {"DOW":"DAY OF WEEK","TRADE TIME":"RUN TIME","STATE":"TYPE OF STATE","G/L %/SHARE":"GAIN %/SHARE"}
     data = [{_ALIAS.get(k,k): v for k, v in row.items()} for row in data]
+    # Normalize GAIN %/SHARE: handle "67.02%" strings, decimal 0.6702, and percent 67.02
+    for row in data:
+        v = row.get("GAIN %/SHARE", "")
+        if v == "" or v is None:
+            continue
+        sv = str(v).strip()
+        try:
+            if sv.endswith("%"):
+                row["GAIN %/SHARE"] = round(float(sv[:-1]) / 100, 6)
+            else:
+                n = float(sv)
+                row["GAIN %/SHARE"] = round(n / 100, 6) if n >= 2 else round(n, 6)
+        except (ValueError, TypeError):
+            row["GAIN %/SHARE"] = ""
 
     df = pd.DataFrame(data)
     if "DATE" in df.columns:
