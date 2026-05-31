@@ -131,18 +131,29 @@ def run_cleanup():
                 if parsed and parsed >= cutoff:
                     bad_auto.append(i)
         if bad_auto:
-            print(f"  Found {len(bad_auto)} automated rows to delete (rows {bad_auto[0]}-{bad_auto[-1]})")
-            # Delete in reverse-order batches of 200 to avoid API limits
-            batch_size = 200
+            print(f"  Found {len(bad_auto)} automated rows to delete")
+            import time as _time
+            # Build contiguous groups, delete from bottom to top
+            groups = []
+            grp_start = bad_auto[0]
+            grp_end   = bad_auto[0]
+            for r in bad_auto[1:]:
+                if r == grp_end + 1:
+                    grp_end = r
+                else:
+                    groups.append((grp_start, grp_end))
+                    grp_start = grp_end = r
+            groups.append((grp_start, grp_end))
+            # Delete largest-index groups first to preserve lower row indices
+            groups_rev = sorted(groups, key=lambda g: g[0], reverse=True)
             deleted = 0
-            for i in range(bad_auto[-1], bad_auto[0] - 1, -batch_size):
-                start = max(bad_auto[0], i - batch_size + 1)
-                end   = i
-                ws_tg_fresh.delete_rows(start, end)
-                deleted += end - start + 1
-                print(f"  Deleted rows {start}-{end} ({deleted}/{len(bad_auto)})")
-                import time; time.sleep(1)
-            print(f"  ✓ All {deleted} automated rows deleted")
+            for gs, ge in groups_rev:
+                ws_tg_fresh.delete_rows(gs, ge)
+                cnt = ge - gs + 1
+                deleted += cnt
+                print(f"  Deleted rows {gs}-{ge} ({cnt} rows, {deleted} total)")
+                _time.sleep(0.8)
+            print(f"  ✓ Deleted {deleted} automated rows")
         else:
             print("  No automated rows found (already clean)")
 
