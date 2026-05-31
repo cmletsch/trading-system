@@ -37,7 +37,7 @@ def build_gainers_json(top_gainers_df: pd.DataFrame, today_runs: list[dict]) -> 
             ep_raw = str(row.get("ENTRY PRICE", "") or "")
             xp_raw = str(row.get("EXIT PRICE",  "") or "")
             hp_raw = ""  # HIGH PRICE INTRA removed
-            gp_raw = str(row.get("GAIN %/SHARE", "") or "").replace("%", "").strip()
+            gp_raw = str(row.get("G/L %/SHARE", "") or "").replace("%", "").strip()
 
             # Normalize gain percent: convert decimal (0.45) → percentage (45)
             gp_raw_clean = str(gp_raw).replace("%","").strip()
@@ -63,7 +63,7 @@ def build_gainers_json(top_gainers_df: pd.DataFrame, today_runs: list[dict]) -> 
                 "legs":     str(_num(str(row.get("# LEGS", "") or ""))),
                 "aplus":    "Y" if str(row.get("A+ OPP?","")).upper().strip()=="Y" else "N",
                 "runs":     str(row.get("# OF RUNS ON CAL DAY", "") or ""),
-                "state":    str(row.get("TYPE OF STATE", "") or ""),
+                "state":    str(row.get("STATE", "") or ""),
                 "range":    str(_num(str(row.get("RANGE", "") or ""))),
                 "pos":      str(_num(str(row.get("POSITION", "") or ""))),
                 "ep":       str(_num(ep_raw)),
@@ -167,7 +167,7 @@ def build_mdr_json(mdr_df: pd.DataFrame, top_gainers_df: pd.DataFrame = None) ->
                     continue
                 ep_raw = tg_row.get("ENTRY PRICE", "") or ""
                 xp_raw = tg_row.get("EXIT PRICE",  "") or ""
-                gp_raw = tg_row.get("GAIN %/SHARE", "") or ""
+                gp_raw = tg_row.get("G/L %/SHARE", "") or ""
 
                 def _parse_price(v):
                     """Parse price — handles floats, strings, dollar signs."""
@@ -313,9 +313,9 @@ def build_watchlist_payload(mdr_df: pd.DataFrame,
                         exits = pd.to_numeric(subset["EXIT PRICE"], errors="coerce").dropna()
                         if not exits.empty:
                             last_exit = float(exits.max())
-                    if "GAIN %/SHARE" in subset.columns:
+                    if "G/L %/SHARE" in subset.columns:
                         gains = pd.to_numeric(
-                            subset["GAIN %/SHARE"].astype(str).str.replace("%","").str.strip(),
+                            subset["G/L %/SHARE"].astype(str).str.replace("%","").str.strip(),
                             errors="coerce"
                         ).dropna()
                         if not gains.empty:
