@@ -22,6 +22,13 @@ import pytz
 
 def get_trading_date() -> date:
     """Get the most recent completed trading day regardless of when script runs."""
+    # Allow override via EOD_TARGET_DATE env var (for backfill)
+    override = os.environ.get("EOD_TARGET_DATE", "").strip()
+    if override:
+        from datetime import date as _date
+        d = _date.fromisoformat(override)
+        print(f"  [BACKFILL] Target date overridden → {d}")
+        return d
     et  = pytz.timezone("America/New_York")
     now = datetime.now(et)
     d   = now.date()
@@ -80,13 +87,12 @@ def build_top_gainers_rows(runs: list[dict], news_map: dict) -> list[dict]:
             "POSITION":              run.get("position", ""),
             "ENTRY PRICE":           run.get("price_entry", ""),
             "EXIT PRICE":            run.get("price_exit",  ""),
-            "HIGH PRICE INTRA":      run.get("price_hod",   ""),
             "20 MA":                 run.get("ma20",  ""),
             "200 MA":                run.get("ma200", ""),
             "GAIN $/SHARE":          gain_d,
             "GAIN %/SHARE":          round(run.get("pct_gain", 0) / 100, 6) if run.get("pct_gain") else "",
-            "NEWS":                  news.get("news",      ""),
-            "NEWS TYPE":             news.get("news_type", ""),
+            "NEWS Y/N":               "Y" if news.get("news_type") else "N",
+            "NEWS CATEGORY":         news.get("news_type", ""),
             "NOTES":                 "",
         }
         rows.append(row)
