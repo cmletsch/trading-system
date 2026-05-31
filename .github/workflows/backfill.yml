@@ -1,0 +1,27 @@
+name: Backfill EOD for Specific Date
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: 'Date to backfill (YYYY-MM-DD)'
+        required: true
+        default: '2026-05-27'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install gspread pandas openpyxl pytz requests yfinance google-auth --quiet
+      - name: Run EOD backfill
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          SPREADSHEET_ID:     ${{ secrets.SPREADSHEET_ID }}
+          POLYGON_API_KEY:    ${{ secrets.POLYGON_API_KEY }}
+          EOD_TARGET_DATE:    ${{ inputs.target_date }}
+        run: python scripts/eod_update.py
