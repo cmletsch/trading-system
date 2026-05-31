@@ -47,9 +47,9 @@ TOP_GAINERS_HEADERS = [
     "DATE", "DAY OF WEEK", "STOCK", "FLOAT", "TOD",
     "TIME IN", "TIME OUT", "RUN TIME", "ENTRY TYPE", "AVG BANDS",
     "# LEGS", "A+ OPP?", "# OF RUNS ON CAL DAY", "TYPE OF STATE",
-    "RANGE", "POSITION", "ENTRY PRICE", "EXIT PRICE", "HIGH PRICE INTRA",
+    "RANGE", "POSITION", "ENTRY PRICE", "EXIT PRICE",
     "20 MA", "200 MA", "GAIN $/SHARE", "GAIN %/SHARE",
-    "NEWS", "NEWS TYPE", "NOTES",
+    "NEWS Y/N", "NEWS CATEGORY", "NOTES",
 ]
 
 def read_top_gainers(days_back: int = 90) -> pd.DataFrame:
