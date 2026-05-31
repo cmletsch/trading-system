@@ -115,11 +115,20 @@ def run_cleanup():
     if all_vals_fresh:
         hdrs = [h.strip() for h in all_vals_fresh[0]]
         date_col = hdrs.index("DATE") if "DATE" in hdrs else 0
+        from datetime import datetime as _dt
+        cutoff = _dt(2026, 5, 27)
         bad_auto = []
         for i, row in enumerate(all_vals_fresh[1:], start=2):
             if len(row) > date_col:
-                raw_d = str(row[date_col]).strip()[:10]
-                if raw_d >= "2026-05-27":
+                raw_d = str(row[date_col]).strip()
+                # Handle both "2026-05-27" and "5/27/2026" date formats
+                parsed = None
+                for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%-m/%-d/%Y"):
+                    try:
+                        parsed = _dt.strptime(raw_d[:10], fmt); break
+                    except Exception:
+                        pass
+                if parsed and parsed >= cutoff:
                     bad_auto.append(i)
         if bad_auto:
             print(f"  Found {len(bad_auto)} automated rows to delete (rows {bad_auto[0]}-{bad_auto[-1]})")
