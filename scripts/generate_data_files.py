@@ -36,7 +36,7 @@ def build_gainers_json(top_gainers_df: pd.DataFrame, today_runs: list[dict]) -> 
 
             ep_raw = str(row.get("ENTRY PRICE", "") or "")
             xp_raw = str(row.get("EXIT PRICE",  "") or "")
-            hp_raw = str(row.get("HIGH PRICE INTRA", "") or "")
+            hp_raw = ""  # HIGH PRICE INTRA removed
             gp_raw = str(row.get("GAIN %/SHARE", "") or "").replace("%", "").strip()
 
             # Normalize gain percent: convert decimal (0.45) → percentage (45)
@@ -76,8 +76,8 @@ def build_gainers_json(top_gainers_df: pd.DataFrame, today_runs: list[dict]) -> 
                 "traded":   "N",
                 "notes":    str(row.get("NOTES", "") or ""),
                 "mdrWl":    "",
-                "news":     str(row.get("NEWS", "") or ""),
-                "newsType": str(row.get("NEWS TYPE", "") or ""),
+                "news":     str(row.get("NEWS Y/N", "") or ""),
+                "newsType": str(row.get("NEWS CATEGORY", "") or ""),
             })
 
     # Today's new runs (not yet in Google Sheets)
@@ -261,7 +261,7 @@ def build_mdr_json(mdr_df: pd.DataFrame, top_gainers_df: pd.DataFrame = None) ->
                 "score":       _num(str(row.get("MDR SCORE", "") or "")),
                 "tier":        str(row.get("TIER", "") or ""),
                 "days":        _num(str(row.get("DAYS ON LIST", "") or "")),
-                "newsType":    str(row.get("NEWS TYPE", "") or ""),
+                "newsType":    str(row.get("NEWS CATEGORY", "") or ""),
                 "lastRunDate": str(row.get("LAST RUN DATE", "") or "")[:10],
                 "daily":       daily,
                 "dates":       dates,
