@@ -416,7 +416,7 @@ def update_netlify_watchlist(payload: dict) -> bool:
 
 # ── WRITE FILES ───────────────────────────────────────────────────────────────
 
-def write_data_files(gainers_data: dict, mdr_data: dict):
+def write_data_files(gainers_data: dict, mdr_data: dict | None):
     """Write JSON files to data/ folder for GitHub commit."""
     os.makedirs("data", exist_ok=True)
     with open("data/gainers.json", "w") as f:
