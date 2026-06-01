@@ -1,64 +1,101 @@
 """
-migrate_columns.py — Fix Google Sheets TOP Gainers column structure:
-- Delete blank/empty column header (was Unnamed:22)
-- Strip leading/trailing spaces from all headers
-- Add NEWS Y/N and NEWS CATEGORY before NOTES
+fetch_historical_news.py
+Fetches news for all unique stocks in TOP Gainers Data that have
+empty NEWS Y/N, writes Y/N and NEWS CATEGORY back to the sheet.
+Processes in batches to respect rate limits.
 """
-import os, sys, time, json
+import os, sys, time
+sys.path.insert(0, os.path.dirname(__file__))
+
+from sheets_client import get_sheet, read_top_gainers, TOP_GAINERS_HEADERS
+from news_classifier import analyze_ticker_news
 import gspread
-from google.oauth2.service_account import Credentials
 
-SCOPES = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
-
-def get_ws():
-    creds = Credentials.from_service_account_info(
-        json.loads(os.environ["GOOGLE_CREDENTIALS"]), scopes=SCOPES)
-    gc = gspread.authorize(creds)
-    sh = gc.open_by_key(os.environ["SPREADSHEET_ID"])
-    return sh.worksheet("TOP Gainers Data")
-
-def col_letter(n):
-    return gspread.utils.rowcol_to_a1(1, n)[:-1]
+BATCH_SIZE = 20   # tickers per batch
+SLEEP_SEC  = 2    # seconds between batches
 
 def main():
     print("=" * 50)
-    print("  COLUMN MIGRATION v2")
+    print("  HISTORICAL NEWS FETCH")
     print("=" * 50)
-    ws = get_ws()
-    headers = ws.row_values(1)
-    print(f"Current headers ({len(headers)}): {headers}")
 
-    # ── Step 1: Delete any columns with blank/empty headers
-    to_delete = [i+1 for i, h in enumerate(headers) if h.strip() == ""]
-    for idx in sorted(to_delete, reverse=True):
-        print(f"  Deleting blank column {idx}")
-        ws.delete_columns(idx)
+    ws = get_sheet("TOP Gainers Data")
+    all_vals = ws.get_all_values()
+    if not all_vals:
+        print("Sheet is empty"); return
+
+    raw_headers = [h.strip() for h in all_vals[0]]
+    print(f"Sheet: {len(all_vals)-1} rows, {len(raw_headers)} cols")
+
+    # Find column indices
+    def ci(name):
+        return raw_headers.index(name) if name in raw_headers else None
+
+    stock_col  = ci("STOCK")
+    news_yn_col  = ci("NEWS Y/N")
+    news_cat_col = ci("NEWS CATEGORY")
+
+    if news_yn_col is None or news_cat_col is None:
+        print("ERROR: NEWS Y/N or NEWS CATEGORY columns not found — run migrate_columns first")
+        return
+
+    # Collect rows that need news (NEWS Y/N is empty or blank)
+    rows_needing_news = []  # (row_idx_1based, ticker)
+    seen_tickers = {}  # ticker → (news_yn, news_cat) once fetched
+
+    for i, row in enumerate(all_vals[1:], start=2):
+        if len(row) <= max(stock_col, news_yn_col):
+            continue
+        ticker = str(row[stock_col]).strip().upper()
+        yn = str(row[news_yn_col]).strip() if len(row) > news_yn_col else ""
+        if ticker and yn == "":
+            rows_needing_news.append((i, ticker))
+
+    print(f"Rows needing news: {len(rows_needing_news)}")
+
+    # Get unique tickers
+    unique_tickers = list(dict.fromkeys(t for _, t in rows_needing_news))
+    print(f"Unique tickers to fetch: {len(unique_tickers)}")
+
+    # Fetch news in batches
+    for i in range(0, len(unique_tickers), BATCH_SIZE):
+        batch = unique_tickers[i:i+BATCH_SIZE]
+        print(f"\nBatch {i//BATCH_SIZE+1}: {batch}")
+        for ticker in batch:
+            if ticker in seen_tickers:
+                continue
+            result = analyze_ticker_news(ticker)
+            news_type = result.get("news_type", "") if result else ""
+            seen_tickers[ticker] = ("Y" if news_type else "N", news_type)
+            print(f"  {ticker}: {news_type or '(none)'}")
+            time.sleep(0.3)
+        time.sleep(SLEEP_SEC)
+
+    # Write back to sheet in batch
+    print(f"\nWriting results to sheet...")
+    updates = []
+    for row_i, ticker in rows_needing_news:
+        if ticker not in seen_tickers:
+            continue
+        yn, cat = seen_tickers[ticker]
+        updates.append({
+            "range": gspread.utils.rowcol_to_a1(row_i, news_yn_col + 1),
+            "values": [[yn]]
+        })
+        updates.append({
+            "range": gspread.utils.rowcol_to_a1(row_i, news_cat_col + 1),
+            "values": [[cat]]
+        })
+
+    # Batch update in chunks of 500
+    written = 0
+    for i in range(0, len(updates), 500):
+        ws.batch_update(updates[i:i+500])
+        written += len(updates[i:i+500]) // 2
+        print(f"  Written {written} rows")
         time.sleep(1)
 
-    # ── Step 2: Strip spaces from all headers
-    headers = ws.row_values(1)
-    stripped = [h.strip() for h in headers]
-    if headers != stripped:
-        print(f"  Stripping spaces from headers...")
-        ws.update([stripped], f"1:1")
-        time.sleep(1)
-
-    # ── Step 3: Add NEWS Y/N and NEWS CATEGORY before NOTES (if not already there)
-    headers = ws.row_values(1)
-    stripped_hdrs = [h.strip() for h in headers]
-    if "NEWS Y/N" not in stripped_hdrs:
-        notes_idx = next((i+1 for i, h in enumerate(stripped_hdrs) if h.strip() == "NOTES"), None)
-        if notes_idx:
-            ws.insert_cols([[]], col=notes_idx)
-            ws.insert_cols([[]], col=notes_idx)
-            ws.update_cell(1, notes_idx,   "NEWS Y/N")
-            ws.update_cell(1, notes_idx+1, "NEWS CATEGORY")
-            print(f"  Added NEWS Y/N + NEWS CATEGORY before NOTES at col {notes_idx}")
-            time.sleep(1)
-
-    final = ws.row_values(1)
-    print(f"\nFinal headers ({len(final)}): {final}")
-    print("✓ Migration complete")
+    print(f"\n✓ News fetch complete — {written} rows updated")
 
 if __name__ == "__main__":
     main()
