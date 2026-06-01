@@ -421,10 +421,13 @@ def write_data_files(gainers_data: dict, mdr_data: dict | None):
     os.makedirs("data", exist_ok=True)
     with open("data/gainers.json", "w") as f:
         json.dump(gainers_data, f, default=str)
-    with open("data/mdr.json", "w") as f:
-        json.dump(mdr_data, f, default=str)
     print(f"  data/gainers.json — {len(gainers_data['records'])} records")
-    print(f"  data/mdr.json     — {len(mdr_data['records'])} records")
+    if mdr_data is not None:
+        with open("data/mdr.json", "w") as f:
+            json.dump(mdr_data, f, default=str)
+        print(f"  data/mdr.json     — {len(mdr_data['records'])} records")
+    else:
+        print(f"  data/mdr.json     — preserved (scoring skipped)")
 
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
