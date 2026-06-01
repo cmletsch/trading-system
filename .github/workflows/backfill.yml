@@ -24,4 +24,5 @@ jobs:
           SPREADSHEET_ID:     ${{ secrets.SPREADSHEET_ID }}
           POLYGON_API_KEY:    ${{ secrets.POLYGON_API_KEY }}
           EOD_TARGET_DATE:    ${{ inputs.target_date }}
+          SKIP_SCORING:       "1"
         run: python scripts/eod_update.py
