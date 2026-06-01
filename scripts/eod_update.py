@@ -155,14 +155,34 @@ def main():
         append_top_gainers_rows(rows)
 
     # ── STEP 5: Update MDR Watchlist ──────────────────────────────────────────
-    top_gainers_df  = read_top_gainers(days_back=365)
-    updated_mdr_df, removed_set = update_mdr_watchlist(top_gainers_df, today_runs, news_map)
-    write_mdr_tracking(updated_mdr_df, removed_set)
+    _skip_scoring = (
+        os.environ.get("SKIP_SCORING","").strip().lower() in ("1","true","yes")
+        or (bool(os.environ.get("EOD_TARGET_DATE","")) and datetime.now(ET).weekday() >= 5)
+    )
+    top_gainers_df = read_top_gainers(days_back=365)
+    if _skip_scoring:
+        print("\n[STEP 5] MDR scoring SKIPPED — preserving existing scores (backfill/weekend)")
+        import json as _json
+        _existing_mdr = "data/mdr.json"
+        if os.path.exists(_existing_mdr):
+            _mdr_raw = _json.loads(open(_existing_mdr).read())
+            import pandas as _pd
+            updated_mdr_df = _pd.DataFrame(_mdr_raw.get("records", []))
+        else:
+            updated_mdr_df, _ = update_mdr_watchlist(top_gainers_df, today_runs, news_map)
+        removed_set = set()
+    else:
+        updated_mdr_df, removed_set = update_mdr_watchlist(top_gainers_df, today_runs, news_map)
+        write_mdr_tracking(updated_mdr_df, removed_set)
 
     # ── STEP 6: Write data files for dashboard ────────────────────────────────
     print("\n[STEP 6] Writing data files...")
     gainers_data = build_gainers_json(top_gainers_df, today_runs)
-    mdr_data     = build_mdr_json(updated_mdr_df, top_gainers_df=read_top_gainers(days_back=90))
+    if _skip_scoring and os.path.exists("data/mdr.json"):
+        print("  data/mdr.json preserved (skipped rescoring)")
+        mdr_data = None
+    else:
+        mdr_data = build_mdr_json(updated_mdr_df, top_gainers_df=read_top_gainers(days_back=90))
     write_data_files(gainers_data, mdr_data)
 
     # ── STEP 7: Update watchlist via Netlify function ─────────────────────────
