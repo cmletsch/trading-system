@@ -167,7 +167,7 @@ def build_mdr_json(mdr_df: pd.DataFrame, top_gainers_df: pd.DataFrame = None) ->
                     continue
                 ep_raw = tg_row.get("ENTRY PRICE", "") or ""
                 xp_raw = tg_row.get("EXIT PRICE",  "") or ""
-                gp_raw = tg_row.get("G/L %/SHARE", "") or ""
+                gp_raw = tg_row.get("G/L %/SHARE") or tg_row.get("GAIN %/SHARE") or ""
 
                 def _parse_price(v):
                     """Parse price — handles floats, strings, dollar signs."""
@@ -191,6 +191,9 @@ def build_mdr_json(mdr_df: pd.DataFrame, top_gainers_df: pd.DataFrame = None) ->
                     ep = _parse_price(ep_raw) if ep_raw else None
                     xp = _parse_price(xp_raw) if xp_raw else None
                     gp = _parse_gain(gp_raw) if gp_raw else None
+                    # Fallback: compute gp from ep/xp if gp missing
+                    if gp is None and ep and xp and ep > 0:
+                        gp = round((xp - ep) / ep, 6)
                 except (ValueError, TypeError):
                     ep = xp = gp = None
 
