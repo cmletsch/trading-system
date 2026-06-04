@@ -227,10 +227,9 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
         print(f"    Warning: could not filter {ticker}: {e}")
         return None
 
-    if len(subset) < MDR_MIN_DAYS:
-        return None
-
-    if len(subset) < MDR_MIN_DAYS:
+    # Must have MDR_MIN_DAYS SEPARATE calendar days (not just multiple runs same day)
+    unique_days = pd.to_datetime(subset["DATE"], errors="coerce").dt.date.nunique()
+    if unique_days < MDR_MIN_DAYS:
         return None
 
     try:
