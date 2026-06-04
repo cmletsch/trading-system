@@ -182,7 +182,7 @@ def main():
         print("  data/mdr.json preserved (skipped rescoring)")
         mdr_data = None
     else:
-        mdr_data = build_mdr_json(updated_mdr_df, top_gainers_df=read_top_gainers(days_back=90))
+        mdr_data = build_mdr_json(updated_mdr_df, top_gainers_df=read_top_gainers(days_back=90), today_runs=today_runs)
     write_data_files(gainers_data, mdr_data)
 
     # ── STEP 7: Update watchlist via Netlify function ─────────────────────────
