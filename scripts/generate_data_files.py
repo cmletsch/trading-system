@@ -305,24 +305,6 @@ def build_watchlist_payload(mdr_df: pd.DataFrame,
     stocks = []
     tickers = []
 
-    # Add today's runs into the per-stock history so newly added stocks show today
-    if today_runs:
-        for run in today_runs:
-            sym = str(run.get("ticker", "") or "").upper().strip()
-            if not sym: continue
-            try:
-                ep = float(run.get("price_entry", 0) or 0)
-                xp = float(run.get("price_exit", 0) or 0)
-                gp = round((xp - ep) / ep, 6) if ep > 0 else None
-                d_str = str(run.get("date", ""))[:10]
-                if sym not in tg_by_stock: tg_by_stock[sym] = []
-                tg_by_stock[sym].append({"date": d_str,
-                    "ep": round(ep, 4) if ep else None,
-                    "xp": round(xp, 4) if xp else None,
-                    "gp": round(gp, 4) if gp else None})
-            except Exception:
-                continue
-
     if not mdr_df.empty:
         cutoff = (pd.Timestamp.today() - pd.Timedelta(days=90)).strftime("%Y-%m-%d")
 
