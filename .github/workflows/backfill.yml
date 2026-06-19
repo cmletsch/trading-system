@@ -8,6 +8,9 @@ on:
         required: true
         default: '2026-06-18'
 
+permissions:
+  contents: write
+
 jobs:
   backfill:
     runs-on: ubuntu-latest
