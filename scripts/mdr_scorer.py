@@ -343,7 +343,8 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
 
 def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
                           today_runs: list[dict],
-                          news_map: dict) -> pd.DataFrame:
+                          news_map: dict,
+                          target_date: date = None) -> tuple[pd.DataFrame, set]:
     """
     Full MDR watchlist update:
     1. Score all existing stocks
@@ -355,7 +356,7 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
     print("\n[STEP 4] Updating MDR Watchlist...")
 
     df = read_mdr_tracking()
-    today = date.today()
+    today = target_date if target_date is not None else date.today()
 
     # ── Auto-add qualifying stocks from full TOP Gainers history ─────────────
     # Scan ALL historical data (not just today) — same logic as old dashboard:
