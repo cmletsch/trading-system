@@ -313,18 +313,23 @@ def read_today_scan_log() -> list[str]:
     if not data:
         return []
 
-    # Match against both today AND the most recent trading day
-    # so tickers added yesterday still get picked up on midnight runs
-    import pytz
+   # BACKFILL: if EOD_TARGET_DATE is set, match the scan log to THAT date,
+    # not today. Otherwise fall back to today + most-recent-trading-day
+    # (so tickers added yesterday still get picked up on midnight runs).
+    import os, pytz
     from datetime import timedelta
-    _et  = pytz.timezone("America/New_York")
-    _now = __import__("datetime").datetime.now(_et)
-    _d   = _now.date()
-    if _now.hour < 16:
-        _d -= timedelta(days=1)
-    while _d.weekday() >= 5:
-        _d -= timedelta(days=1)
-    valid_dates = {date.today().isoformat(), _d.isoformat()}
+    _target = os.environ.get("EOD_TARGET_DATE", "").strip()
+    if _target:
+        valid_dates = {_target[:10]}
+    else:
+        _et  = pytz.timezone("America/New_York")
+        _now = __import__("datetime").datetime.now(_et)
+        _d   = _now.date()
+        if _now.hour < 16:
+            _d -= timedelta(days=1)
+        while _d.weekday() >= 5:
+            _d -= timedelta(days=1)
+        valid_dates = {date.today().isoformat(), _d.isoformat()}
 
     tickers = []
     seen = set()
