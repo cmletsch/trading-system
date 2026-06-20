@@ -123,8 +123,15 @@ def main():
     csv_tickers  = [t["ticker"] for t in fetch_csv_drop()]
     # Scan log first (your hand-picked stocks), then AV gainers, deduped
     analysis_tickers = list(dict.fromkeys(scan_tickers + csv_tickers + av_tickers))
-    print(f"  Running candle analysis on {len(analysis_tickers)} tickers "
-          f"({len(scan_tickers)} scan log + {len(av_tickers)} AV gainers)")
+    # BACKFILL: Polygon/scan-log only return current-day data. For a past date they're
+    # empty, so fall back to the full ticker pool (MDR watchlist) for historical analysis.
+    is_backfill = bool(os.environ.get("EOD_TARGET_DATE", "").strip())
+    if is_backfill and len(analysis_tickers) == 0:
+        analysis_tickers = list(dict.fromkeys(tickers))
+        print(f"  [BACKFILL] No live gainers — analyzing {len(analysis_tickers)} MDR watchlist tickers for historical date")
+    else:
+        print(f"  Running candle analysis on {len(analysis_tickers)} tickers "
+              f"({len(scan_tickers)} scan log + {len(av_tickers)} AV gainers)")
     trading_date = get_trading_date()
     print(f"  Target trading date: {trading_date}")
     today_runs = run_batch_analysis(analysis_tickers, target_date=trading_date)
