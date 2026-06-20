@@ -164,7 +164,6 @@ def main():
     # ── STEP 5: Update MDR Watchlist ──────────────────────────────────────────
     _skip_scoring = (
         os.environ.get("SKIP_SCORING","").strip().lower() in ("1","true","yes")
-        or (bool(os.environ.get("EOD_TARGET_DATE","")) and datetime.now(ET).weekday() >= 5)
     )
     top_gainers_df = read_top_gainers(days_back=365)
     if _skip_scoring:
@@ -176,10 +175,10 @@ def main():
             import pandas as _pd
             updated_mdr_df = _pd.DataFrame(_mdr_raw.get("records", []))
         else:
-            updated_mdr_df, _ = update_mdr_watchlist(top_gainers_df, today_runs, news_map)
+            updated_mdr_df, _ = update_mdr_watchlist(top_gainers_df, today_runs, news_map, target_date=trading_date)
         removed_set = set()
     else:
-        updated_mdr_df, removed_set = update_mdr_watchlist(top_gainers_df, today_runs, news_map)
+        updated_mdr_df, removed_set = update_mdr_watchlist(top_gainers_df, today_runs, news_map, target_date=trading_date)
         write_mdr_tracking(updated_mdr_df, removed_set)
 
     # ── STEP 6: Write data files for dashboard ────────────────────────────────
