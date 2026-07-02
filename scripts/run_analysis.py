@@ -22,7 +22,7 @@ from config import (
     PENNY_THRESHOLD, NARROW_MAX, MEDIUM_MAX,
     CONSOL_BARS, CONSOL_FACTOR,
 )
-from finnhub_client import fetch_candles_polygon_2min, POLY_DELAY
+from finnhub_client import fetch_candles_polygon_2min, YAHOO_DELAY
 
 
 # ── SESSION HELPERS ───────────────────────────────────────────────────────────
@@ -242,7 +242,7 @@ def run_batch_analysis(tickers: list[str], target_date: date = None) -> list[dic
 
     print(f"\n[STEP 2] Running 2-min analysis on {len(tickers)} tickers "
           f"for {target_date} via yfinance (Yahoo Finance)...")
-    print(f"  (Rate limit: 5 calls/min → ~{len(tickers) * POLY_DELAY / 60:.0f} min total)")
+    print(f"  (Pacing: ~{len(tickers) * YAHOO_DELAY / 60:.1f} min total)")
 
     all_runs = []
     for idx, ticker in enumerate(tickers, 1):
@@ -266,9 +266,9 @@ def run_batch_analysis(tickers: list[str], target_date: date = None) -> list[dic
         except Exception as e:
             print(f"  — error: {str(e)[:60]}")
 
-        # Polygon rate limit
+        # Yahoo pacing (much lighter than Polygon's old free-tier limit)
         if idx < len(tickers):
-            time.sleep(POLY_DELAY)
+            time.sleep(YAHOO_DELAY)
 
     qualifying = [r for r in all_runs if r["pct_gain"] >= MIN_RUN_PCT]
     print(f"\n  Analysis complete: {len(qualifying)} qualifying runs across "
