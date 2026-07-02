@@ -120,51 +120,75 @@ def fetch_candles_polygon_2min(ticker: str, target_date: date) -> pd.DataFrame:
 
 def batch_fetch_live_data(tickers: list) -> dict:
     """
-    Batch live quotes via Polygon snapshot.
+    Batch live quotes via Yahoo Finance (free, no API key).
+
+    NOTE: This used to call Polygon's /v2/snapshot/.../tickers endpoint, which
+    hit the same free-tier cutoff as the candle fetch above (403 NOT_AUTHORIZED).
+    Switched to Yahoo's v7/finance/quote batch endpoint — the same proven pattern
+    already used successfully elsewhere in this project's Netlify functions.
     Returns fields matching the MDR scorer's expected keys:
       price, day_chg, rvol, gap_pct, volume
     """
-    if not tickers or not POLYGON_KEY:
+    if not tickers:
         return {}
     results = {}
-    chunk_size = 100
+    chunk_size = 75
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://finance.yahoo.com/",
+        "Origin": "https://finance.yahoo.com",
+    }
     for i in range(0, len(tickers), chunk_size):
         chunk = tickers[i:i + chunk_size]
         sym_str = ",".join(chunk)
-        try:
-            resp = requests.get(
-                "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers",
-                params={"tickers": sym_str, "apiKey": POLYGON_KEY},
-                timeout=15
-            )
-            if resp.status_code != 200:
-                print(f" [POLY_SNAP_ERR {resp.status_code}:{resp.text[:60]}]", end="")
-                continue
-            if resp.status_code == 200:
+        got_any = False
+        for host in ("query1", "query2"):
+            try:
+                resp = requests.get(
+                    f"https://{host}.finance.yahoo.com/v7/finance/quote",
+                    params={"symbols": sym_str, "formatted": "false",
+                            "lang": "en-US", "region": "US"},
+                    headers=headers, timeout=15,
+                )
+                if resp.status_code != 200:
+                    continue
                 data = resp.json()
-                if i == 0 and not data.get("tickers"):
-                    print(f" [POLY_SNAP_EMPTY: {str(data)[:80]}]", end="")
-                for item in data.get("tickers", []):
-                    sym      = str(item.get("ticker", "")).upper()
-                    day      = item.get("day", {})
-                    prev_day = item.get("prevDay", {})
-                    price    = float(item.get("lastTrade", {}).get("p", 0)
-                                     or day.get("c", 0) or 0)
-                    if not sym or price <= 0:
+                quotes = ((data or {}).get("quoteResponse") or {}).get("result") or []
+                if not quotes:
+                    continue
+                got_any = True
+                for item in quotes:
+                    sym = str(item.get("symbol", "")).upper()
+                    if not sym:
+                        continue
+                    price = float(item.get("regularMarketPrice", 0) or 0)
+                    # Prefer extended-hours price if that's the live session
+                    if item.get("marketState") == "PRE" and item.get("preMarketPrice"):
+                        price = float(item["preMarketPrice"])
+                    elif item.get("marketState") == "POST" and item.get("postMarketPrice"):
+                        price = float(item["postMarketPrice"])
+                    if price <= 0:
                         continue
 
-                    # Day change %
-                    day_chg = float(item.get("todaysChangePerc", 0) or 0)
+                    prev_close = float(item.get("regularMarketPreviousClose", 0) or 0)
+                    day_open   = float(item.get("regularMarketOpen", 0) or 0)
+                    day_chg = float(item.get("regularMarketChangePercent", 0) or 0)
+                    if prev_close > 0:
+                        day_chg = round((price - prev_close) / prev_close * 100, 2)
 
-                    # Volume + RVOL (today vs yesterday)
-                    vol      = float(day.get("v", 0) or 0)
-                    prev_vol = float(prev_day.get("v", 0) or 0)
-                    rvol     = round(vol / prev_vol, 2) if prev_vol > 0 else 0
+                    vol = float(item.get("regularMarketVolume", 0) or 0)
+                    if item.get("marketState") == "PRE" and item.get("preMarketVolume"):
+                        vol = float(item["preMarketVolume"])
+                    elif item.get("marketState") == "POST" and item.get("postMarketVolume"):
+                        vol = float(item["postMarketVolume"])
+                    avg_vol = float(item.get("averageDailyVolume10Day", 0)
+                                    or item.get("averageDailyVolume3Month", 0) or 0)
+                    rvol = round(vol / avg_vol, 2) if avg_vol > 0 else 0
 
-                    # Gap % = (today open - prev close) / prev close * 100
-                    day_open  = float(day.get("o", 0) or 0)
-                    prev_close= float(prev_day.get("c", 0) or 0)
-                    gap_pct   = round((day_open - prev_close) / prev_close * 100, 2)                                 if prev_close > 0 and day_open > 0 else 0
+                    gap_pct = round((day_open - prev_close) / prev_close * 100, 2) \
+                        if prev_close > 0 and day_open > 0 else 0
 
                     results[sym] = {
                         "price":   price,
@@ -173,10 +197,13 @@ def batch_fetch_live_data(tickers: list) -> dict:
                         "gap_pct": gap_pct,
                         "volume":  int(vol),
                     }
-        except Exception as e:
-            print(f" [POLY_QUOTE_ERR:{str(e)[:40]}]", end="")
+                break  # this host worked, no need to try the other
+            except Exception as e:
+                print(f" [YAHOO_QUOTE_ERR:{str(e)[:40]}]", end="")
+        if not got_any and i == 0:
+            print(" [YAHOO_QUOTE_EMPTY]", end="")
         if i + chunk_size < len(tickers):
-            time.sleep(0.5)
+            time.sleep(0.3)
     return results
 
 
