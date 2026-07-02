@@ -10,31 +10,57 @@ from datetime import date, timedelta
 
 POLYGON_KEY = os.environ.get("POLYGON_API_KEY", "")
 POLY_DELAY  = 12.5
+YAHOO_DELAY = 1.2  # Yahoo has no per-minute cap like Polygon's old free tier — much lighter pacing is safe
 ET          = pytz.timezone("America/New_York")
 
 
 def _fetch_1min_bars(ticker: str, date_str: str) -> list:
-    """Fetch 1-min bars for a single date from Polygon."""
-    url = (f"https://api.polygon.io/v2/aggs/ticker/{ticker.upper()}"
-           f"/range/1/minute/{date_str}/{date_str}")
+    """Fetch 1-min bars for a single date via Yahoo Finance (free, no API key).
+
+    NOTE: This used to call Polygon's /v2/aggs/.../range/1/minute/... endpoint.
+    Polygon discontinued free-tier access to that endpoint (~2026-06-29) and it now
+    returns 403 NOT_AUTHORIZED on every call. The old code silently treated any
+    non-200 response as 'no data' (returned []), so this failure was invisible —
+    the EOD script kept reporting SUCCESS while finding zero qualifying runs, every
+    night, since 6/29. Switched to Yahoo's chart API, which needs no key and is
+    already used successfully elsewhere in this project (the Netlify screener).
+    Yahoo retains 1-minute granularity for roughly the trailing 7 calendar days,
+    which comfortably covers the 4-trading-day lookback this function needs.
+    """
     try:
+        target = date.fromisoformat(date_str)
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker.upper()}"
         resp = requests.get(url, params={
-            "adjusted": "true", "sort": "asc",
-            "limit": 50000, "apiKey": POLYGON_KEY,
-        }, timeout=15)
+            "interval": "1m", "range": "8d", "includePrePost": "true",
+        }, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"}, timeout=15)
         if resp.status_code != 200:
             return []
         data = resp.json()
-        if data.get("status") not in ("OK", "DELAYED") or not data.get("results"):
+        result = (data.get("chart", {}) or {}).get("result")
+        if not result:
             return []
+        r0 = result[0]
+        timestamps = r0.get("timestamp") or []
+        quote = ((r0.get("indicators") or {}).get("quote") or [{}])[0]
+        opens  = quote.get("open")  or []
+        highs  = quote.get("high")  or []
+        lows   = quote.get("low")   or []
+        closes = quote.get("close") or []
+        vols   = quote.get("volume") or []
         rows = []
-        for bar in data["results"]:
+        for i, ts in enumerate(timestamps):
             try:
-                ts = pd.Timestamp(bar["t"], unit="ms").tz_localize("UTC").tz_convert(ET)
-                rows.append({"timestamp": ts,
-                             "Open": float(bar["o"]), "High": float(bar["h"]),
-                             "Low": float(bar["l"]), "Close": float(bar["c"]),
-                             "Volume": float(bar.get("v", 0))})
+                t = pd.Timestamp(ts, unit="s", tz="UTC").tz_convert(ET)
+                if t.date() != target:
+                    continue  # only keep bars for the requested day
+                o, h, l, c = opens[i], highs[i], lows[i], closes[i]
+                if o is None or h is None or l is None or c is None:
+                    continue  # Yahoo pads gaps with nulls — skip them
+                v = vols[i] if i < len(vols) and vols[i] is not None else 0
+                rows.append({"timestamp": t,
+                             "Open": float(o), "High": float(h),
+                             "Low": float(l), "Close": float(c),
+                             "Volume": float(v)})
             except Exception:
                 continue
         return rows
@@ -44,13 +70,10 @@ def _fetch_1min_bars(ticker: str, date_str: str) -> list:
 
 def fetch_candles_polygon_2min(ticker: str, target_date: date) -> pd.DataFrame:
     """
-    Fetch 3 trading days of 1-min bars, resample to 2-min.
-    MAs calculated over full window so 200 MA is always populated at entry bar.
-    Returns only target_date bars with fully-calculated MAs.
+    Fetch 3 trading days of 1-min bars (via Yahoo Finance — see _fetch_1min_bars),
+    resample to 2-min. MAs calculated over full window so 200 MA is always
+    populated at entry bar. Returns only target_date bars with fully-calculated MAs.
     """
-    if not POLYGON_KEY:
-        print(" [NO POLYGON KEY]", end="")
-        return pd.DataFrame()
     try:
         all_rows = []
         check_date = target_date
