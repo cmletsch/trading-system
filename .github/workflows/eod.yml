@@ -2,10 +2,11 @@ name: EOD Trading Update
 
 on:
   schedule:
-    # 8pm EDT (UTC-4) = 00:00 UTC Tuesday-Saturday
-    # NOTE: In November when clocks fall back, change to:
-    # - cron: '0 1 * * 2-6'   (8pm EST = 01:00 UTC)
+    # Always 8 PM New York time. GitHub cron is UTC, so schedule both possible UTC
+    # hours; the "gate" job below lets only the one that is 8 PM ET actually run.
+    #   8 PM EDT (summer) = 00:00 UTC,  8 PM EST (winter) = 01:00 UTC  (Tue-Sat UTC)
     - cron: '0 0 * * 2-6'
+    - cron: '0 1 * * 2-6'
   workflow_dispatch:
     inputs:
       target_date:
@@ -20,7 +21,24 @@ permissions:
   contents: write
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.g.outputs.run }}
+    steps:
+      - id: g
+        run: |
+          H=$(TZ=America/New_York date +%H)
+          if [ "${{ github.event_name }}" != "schedule" ] || [ "$H" = "20" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Not 8 PM in New York (hour $H) - skipping this duplicate trigger"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   eod-update:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
