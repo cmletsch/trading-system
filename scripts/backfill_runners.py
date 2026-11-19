@@ -38,9 +38,14 @@ def main():
     from sheets_client import append_top_gainers_rows
     tickers = load_tickers()
     print(f"Backfill: {len(tickers)} tickers, threshold +{RUNNER_MIN_PCT:.0f}%")
-    runs = []
+    runs, empty = [], 0
     for i, t in enumerate(tickers, 1):
         df = fetch_5m(t, days=60)
+        empty = empty + 1 if df.empty else 0
+        if empty >= 25 and i <= 30:
+            print("STOPPING: Yahoo returned no data for the first 25 tickers in a row "
+                  "(blocked or rate-limited). Nothing was written.")
+            sys.exit(1)
         got = runners_from_bars(t, df)
         if got:
             print(f"  [{i}/{len(tickers)}] {t}: {len(got)} runner session(s)")

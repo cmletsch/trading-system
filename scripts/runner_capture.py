@@ -78,20 +78,41 @@ def gather_candidates(extra=None) -> list:
 # ── bars ──────────────────────────────────────────────────────────────────────
 
 def fetch_5m(ticker: str, days: int = 60) -> pd.DataFrame:
-    """5-minute bars with pre/post market, ET index. Yahoo keeps ~60 days."""
-    import yfinance as yf
+    """5-minute bars with pre/post market, ET index. Yahoo keeps ~60 days.
+    Uses the same raw chart endpoint the rest of this project already uses
+    (yfinance's cookie/crumb login is blocked on GitHub runners)."""
+    rng = "60d" if days > 30 else f"{max(days, 5)}d"
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker.upper()}"
+    data = None
+    for attempt in range(3):
+        try:
+            r = requests.get(url, params={"interval": "5m", "range": rng,
+                                          "includePrePost": "true"},
+                             headers=HEADERS, timeout=20)
+            if r.status_code == 429:
+                time.sleep(2 * (attempt + 1)); continue
+            if r.status_code != 200:
+                return pd.DataFrame()
+            data = r.json(); break
+        except Exception:
+            time.sleep(1)
     try:
-        df = yf.Ticker(ticker).history(period=f"{days}d", interval="5m",
-                                       prepost=True, auto_adjust=False)
+        res = ((data or {}).get("chart") or {}).get("result")
+        if not res:
+            return pd.DataFrame()
+        r0 = res[0]
+        ts = r0.get("timestamp") or []
+        q = ((r0.get("indicators") or {}).get("quote") or [{}])[0]
+        df = pd.DataFrame({
+            "Open": q.get("open"), "High": q.get("high"), "Low": q.get("low"),
+            "Close": q.get("close"), "Volume": q.get("volume"),
+        }, index=pd.to_datetime(ts, unit="s", utc=True))
+        df = df.dropna(subset=["Open", "High", "Low", "Close"])
+        df["Volume"] = df["Volume"].fillna(0)
+        df.index = df.index.tz_convert(ET)
+        return df
     except Exception:
         return pd.DataFrame()
-    if df is None or df.empty:
-        return pd.DataFrame()
-    df = df.dropna(subset=["Open", "High", "Low", "Close"])
-    if df.index.tz is None:
-        df.index = df.index.tz_localize("UTC")
-    df.index = df.index.tz_convert(ET)
-    return df
 
 
 # ── detection ─────────────────────────────────────────────────────────────────
