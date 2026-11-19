@@ -64,15 +64,20 @@ def build_top_gainers_rows(runs: list[dict], news_map: dict) -> list[dict]:
     today = get_trading_date()
     rows = []
     for run in runs:
+        # Backfilled runs carry their own date; nightly runs use the trading date
+        try:
+            row_date = date.fromisoformat(str(run.get("date", ""))[:10]) if run.get("date") else today
+        except Exception:
+            row_date = today
         ticker = run.get("ticker", "")
         news   = news_map.get(ticker, {})
         ep = run.get("price_entry", 0)
         xp = run.get("price_exit",  0)
         gain_d = round(float(xp) - float(ep), 4) if ep and xp else ""
         row = {
-            "DATE":          today.isoformat(),
-            "DOW":           today.strftime("%A"),
-            "WEEK#":         str(today.isocalendar()[1]),
+            "DATE":          row_date.isoformat(),
+            "DOW":           row_date.strftime("%A"),
+            "WEEK#":         str(row_date.isocalendar()[1]),
             "STOCK":         ticker,
             "FLOAT":         run.get("float", ""),
             "TOD":           run.get("tod", ""),
@@ -94,7 +99,7 @@ def build_top_gainers_rows(runs: list[dict], news_map: dict) -> list[dict]:
             "MDR WATCHLIST": "",
             "NEWS Y/N":      "Y" if news.get("news_type") else "N",
             "NEWS CATEGORY": news.get("news_type", ""),
-            "NOTES":         "",
+            "NOTES":         run.get("note", ""),
         }
         rows.append(row)
     return rows
@@ -136,7 +141,16 @@ def main():
     print(f"  Target trading date: {trading_date}")
     today_runs = run_batch_analysis(analysis_tickers, target_date=trading_date)
     if not today_runs:
-        print("\n  No qualifying runs found today")
+        print("\n  No qualifying FGE/Blast runs found today")
+
+    # ── STEP 2a: Runner capture (any stock that ran RUNNER_MIN_PCT+, any shape) ──
+    try:
+        from runner_capture import capture_runners
+        runner_rows = capture_runners(trading_date, extra_tickers=analysis_tickers + tickers,
+                                      existing_runs=today_runs)
+        today_runs = list(today_runs) + runner_rows
+    except Exception as e:
+        print(f"  [RUNNER CAPTURE FAILED, continuing without it: {str(e)[:100]}]")
 
     # ── STEP 2b: Fetch floats for qualifying tickers ─────────────────────────
     if today_runs:

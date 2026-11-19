@@ -152,3 +152,7 @@ YF_GAINERS_COUNT    = 100      # how many top gainers to pull
 YF_MIN_GAIN_PCT     = 10.0     # minimum % gain to include
 YF_MIN_PRICE        = 0.10     # minimum price filter
 YF_MAX_PRICE        = 50.00    # maximum price filter (focus on small caps)
+
+# ── RUNNER CAPTURE (every stock that ran big, regardless of chart pattern) ────
+RUNNER_MIN_PCT = 35.0      # move vs reference price (prior close; 4 PM close for after hours)
+RUNNER_MIN_VOL = 50000     # min shares traded in the session up to the peak (filters thin one-print spikes)

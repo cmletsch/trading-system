@@ -254,11 +254,26 @@ def fetch_float_polygon(ticker: str) -> str:
     return ""
 
 
+def fetch_float_yahoo(ticker: str) -> str:
+    """TRUE float (millions) from Yahoo. Polygon only knows shares OUTSTANDING,
+    which can be many times the float (CUE: 97M outstanding vs 7.3M float)."""
+    try:
+        import yfinance as yf
+        info = yf.Ticker(ticker.upper()).info or {}
+        f = info.get("floatShares")
+        if f and float(f) > 0:
+            return str(round(float(f) / 1_000_000, 2))
+    except Exception:
+        pass
+    return ""
+
+
 def fetch_floats_batch(tickers: list) -> dict:
-    """Fetch floats for a list of tickers. Returns {ticker: float_str}."""
+    """Fetch floats for a list of tickers. Returns {ticker: float_str}.
+    Yahoo float first; Polygon shares-outstanding only as a last-resort fallback."""
     result = {}
     for ticker in tickers:
-        result[ticker] = fetch_float_polygon(ticker)
+        result[ticker] = fetch_float_yahoo(ticker) or fetch_float_polygon(ticker)
         time.sleep(0.3)
     return result
 

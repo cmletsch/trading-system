@@ -257,7 +257,7 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
             return ""
 
         # Validate entry_type — must be a real pattern, not Y/N/blank
-        VALID_ENTRY_TYPES = {"FGE", "BLAST", "FGE+BLAST", "FGE/BLAST", "BREAKOUT", "BO"}
+        VALID_ENTRY_TYPES = {"FGE", "BLAST", "FGE+BLAST", "FGE/BLAST", "BREAKOUT", "BO", "RUNNER"}
         raw_et = safe_get(latest, "ENTRY TYPE")
         entry_type = raw_et if raw_et.upper() in VALID_ENTRY_TYPES else ""
         # If latest is bad, try mode of all rows
