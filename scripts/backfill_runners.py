@@ -53,8 +53,8 @@ def main():
         time.sleep(0.4)
     print(f"Total runner rows: {len(runs)} on {len({r['ticker'] for r in runs})} tickers")
     if os.environ.get("DRY_RUN", "").strip() in ("1", "true", "yes"):
-        for r in runs[:40]:
-            print("  ", r["date"], r["ticker"], r["session"], r["move_pct"], r["note"])
+        for r in runs:
+            print("RR|%s|%s|%s|%s|%s|%s" % (r["date"], r["ticker"], r["session"], r["move_pct"], r["vol"], r["pct_gain"]))
         return
     fl = fetch_floats_batch(sorted({r["ticker"] for r in runs}))
     for r in runs:
