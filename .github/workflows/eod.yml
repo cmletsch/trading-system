@@ -28,11 +28,16 @@ jobs:
     steps:
       - id: g
         run: |
-          H=$(TZ=America/New_York date +%H)
-          if [ "${{ github.event_name }}" != "schedule" ] || [ "$H" = "20" ]; then
+          # Decide from WHICH cron fired, not from the clock at run time: GitHub can delay scheduled
+          # runs by hours, and a clock check then skips the run (this happened 11/19, the 11/18 update never ran).
+          # 8 PM New York = 00:00 UTC in summer (EDT, -0400) or 01:00 UTC in winter (EST, -0500).
+          OFF=$(TZ=America/New_York date +%z)
+          if [ "$OFF" = "-0400" ]; then WANT='0 0 * * 2-6'; else WANT='0 1 * * 2-6'; fi
+          echo "event=${{ github.event_name }} fired=[${{ github.event.schedule }}] wanted=[$WANT] offset=$OFF"
+          if [ "${{ github.event_name }}" != "schedule" ] || [ "${{ github.event.schedule }}" = "$WANT" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Not 8 PM in New York (hour $H) - skipping this duplicate trigger"
+            echo "Duplicate trigger for the other UTC hour - skipping"
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
