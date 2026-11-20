@@ -155,4 +155,5 @@ YF_MAX_PRICE        = 50.00    # maximum price filter (focus on small caps)
 
 # ── RUNNER CAPTURE (every stock that ran big, regardless of chart pattern) ────
 RUNNER_MIN_PCT = 35.0      # move vs reference price (prior close; 4 PM close for after hours)
+MDR_RUNNER_MIN_PCT = 40.0   # runner rows are SAVED from RUNNER_MIN_PCT (35%) but only count as an MDR run day at this move or more
 RUNNER_MIN_VOL = 50000     # min shares traded in the session up to the peak (filters thin one-print spikes)

@@ -11,7 +11,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from config import (
-    MDR_LOOKBACK_DAYS, MDR_MIN_DAYS,
+    MDR_LOOKBACK_DAYS, MDR_MIN_DAYS, MDR_RUNNER_MIN_PCT,
     MDR_SCORE_DAYS, MDR_SCORE_ESCALATING, MDR_SCORE_PRICE_GTE,
     MDR_SCORE_DAY_CHANGE, MDR_SCORE_RVOL, MDR_SCORE_GAP,
     MDR_SCORE_PATTERNS, NEWS_SCORES,
@@ -187,6 +187,22 @@ def is_timed_out(days_on_list: int, days_since_last_run: int) -> tuple[bool, boo
 # ── QUALIFY CHECK ─────────────────────────────────────────────────────────────
 
 
+import re as _re
+
+def _mdr_eligible(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop RUNNER rows whose recorded move is below MDR_RUNNER_MIN_PCT.
+    Runner rows are saved from RUNNER_MIN_PCT (35%), but only 40%+ runner days count toward MDR.
+    Non-runner rows, and runner rows with no readable move, are kept as before."""
+    if df is None or df.empty or "ENTRY TYPE" not in df.columns or "NOTES" not in df.columns:
+        return df
+    et = df["ENTRY TYPE"].astype(str).str.upper().str.strip()
+    def weak(note):
+        m = _re.search(r"RUNNER \w+: \+(\d+(?:\.\d+)?)%", str(note))
+        return bool(m) and float(m.group(1)) < MDR_RUNNER_MIN_PCT
+    drop = (et == "RUNNER") & df["NOTES"].map(weak)
+    return df[~drop]
+
+
 def _valid_float(val: str) -> str:
     """Return numeric float string or empty if invalid (rejects time strings etc.)."""
     try:
@@ -207,6 +223,7 @@ def qualifies_for_watchlist(ticker: str, top_gainers_df: pd.DataFrame) -> dict |
     ticker = ticker.upper().strip()
     cutoff = pd.Timestamp.today() - pd.Timedelta(days=MDR_LOOKBACK_DAYS)
 
+    top_gainers_df = _mdr_eligible(top_gainers_df)
     cols = top_gainers_df.columns.tolist()
 
     # Require STOCK and DATE at minimum
@@ -367,8 +384,9 @@ def update_mdr_watchlist(top_gainers_df: pd.DataFrame,
     history_tickers = set()
     if not top_gainers_df.empty and "STOCK" in top_gainers_df.columns:
         cutoff = (pd.Timestamp.today() - pd.Timedelta(days=MDR_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+        _elig = _mdr_eligible(top_gainers_df)
         counts = (
-            top_gainers_df[pd.to_datetime(top_gainers_df["DATE"], errors="coerce")
+            _elig[pd.to_datetime(_elig["DATE"], errors="coerce")
                           >= pd.Timestamp(cutoff)]
             ["STOCK"].astype(str).str.upper().str.strip()
             .value_counts()
